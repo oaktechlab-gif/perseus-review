@@ -228,15 +228,19 @@ html, body { overflow: hidden; }
 .mini.on { border-color: var(--bronze); opacity: 1; }
 /* translucent controls over the map */
 .dpad { position: absolute; z-index: 4; left: max(14px, env(safe-area-inset-left, 0px)); bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(3, 54px); grid-template-rows: repeat(3, 54px); gap: 3px; }
-.dpad button { background: rgba(36, 45, 88, 0.42); border: 2px solid rgba(155, 162, 200, 0.45); box-shadow: none; color: rgba(236, 228, 207, 0.85); font-size: 20px; border-radius: 10px; }
+.dpad button { background: rgba(36, 45, 88, 0.26); border: 2px solid rgba(155, 162, 200, 0.32); box-shadow: none; color: rgba(236, 228, 207, 0.45); font-size: 20px; border-radius: 10px; }
 .dpad button:active { background: rgba(226, 176, 74, 0.45); transform: none; box-shadow: none; }
 .dpad .u { grid-column: 2; grid-row: 1; } .dpad .l { grid-column: 1; grid-row: 2; } .dpad .r { grid-column: 3; grid-row: 2; } .dpad .d { grid-column: 2; grid-row: 3; }
 .cmds { position: absolute; z-index: 4; right: max(14px, env(safe-area-inset-right, 0px)); bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: 64px 64px; grid-template-rows: 54px 64px; gap: 8px; }
-.cmd { border-radius: 50%; background: rgba(36, 45, 88, 0.45); border: 2px solid rgba(155, 162, 200, 0.5); color: rgba(236, 228, 207, 0.9); font-size: 13px; box-shadow: none; }
+.cmd { border-radius: 50%; background: rgba(36, 45, 88, 0.26); border: 2px solid rgba(155, 162, 200, 0.34); color: rgba(236, 228, 207, 0.55); font-size: 13px; box-shadow: none; }
+/* idle: the controls fade out; the first touch only brings them back */
+.dpad, .cmds { transition: opacity 0.5s; }
+.stage.idle .dpad, .stage.idle .cmds { opacity: 0; }
+#cv { touch-action: none; cursor: grab; }
 .cmd:active { background: rgba(226, 176, 74, 0.45); }
 #itemBtn { grid-column: 1; grid-row: 1 / 3; align-self: center; height: 64px; }
 #waitBtn { grid-column: 2; grid-row: 1; width: 54px; height: 54px; justify-self: center; font-size: 12px; }
-.cmd.undo { grid-column: 2; grid-row: 2; width: 64px; height: 64px; border-color: rgba(226, 176, 74, 0.75); color: var(--bronze); font-size: 14px; }
+.cmd.undo { grid-column: 2; grid-row: 2; width: 64px; height: 64px; border-color: rgba(226, 176, 74, 0.5); color: rgba(226, 176, 74, 0.7); font-size: 14px; }
 .cmd.hint, #itemBtn.hint { border-color: var(--bronze); animation: blink 0.4s steps(2) 4; }
 #itemBtn.on { border-color: var(--bronze); color: var(--bronze); }
 /* item window: opens from the 道具 button */
@@ -1827,7 +1831,7 @@ function startStage(i, showIntro = true) {
 }
 
 function doAction(a) {
-  if (overview) setOverview(false);
+  panned = false;
   if (cardMode || state.status !== 'play') return;
   const prev = state;
   const next = act(state, a);
@@ -2497,21 +2501,30 @@ $('itemClose').addEventListener('click', closeItems);
 $('waitBtn').addEventListener('click', () => { closeItems(); doAction('wait'); });
 function toggleSound() { soundOn = !soundOn; }
 // ---------- view, camera & touch ----------
-// landscape: the map fills the screen. A map that fits is shown whole (tiles at most 1/5 of the height);
-// a larger one keeps tiles at least 1/7.5 of the height and the camera follows Perseus
+// landscape: the map fills the screen at one fixed tile size (the Medusa stage's: 7.5 tiles to the height);
+// the minimap toggles a fixed zoom-out (half size). The camera keeps Perseus inside the "safe" middle of the
+// screen, clear of the d-pad, the commands, the top bar and the message window, even past the map's edge.
+// Dragging the map looks around; the next move brings the camera back to Perseus.
 const view = { w: 16, h: 7, bx: 0, by: 0, bw: 11, bh: 9 };
 const cam = { x: 0, y: 0 };
-let overview = false;
+const overview = false; // (old whole-map view, retired)
+let zoomOut = false, panned = false;
+const safe = { x0: 0, y0: 0, x1: 16, y1: 7 }; // in tiles, relative to the view's top-left
 function camTarget(s, px_, py_) {
-  if (view.w >= view.bw && view.h >= view.bh) return [(view.bx + view.bw / 2) * T - view.w * T / 2, (view.by + view.bh / 2) * T - view.h * T / 2];
-  if (view.w >= view.bw) { const r = camTarget1(s, px_, py_); return [(view.bx + view.bw / 2) * T - view.w * T / 2, r[1]]; }
-  if (view.h >= view.bh) { const r = camTarget1(s, px_, py_); return [r[0], (view.by + view.bh / 2) * T - view.h * T / 2]; }
-  return camTarget1(s, px_, py_);
-}
-function camTarget1(s, px_, py_) {
-  const minX = view.bx * T, minY = view.by * T;
-  const maxX = Math.max(minX, (view.bx + view.bw - view.w) * T), maxY = Math.max(minY, (view.by + view.bh - view.h) * T);
-  return [Math.min(maxX, Math.max(minX, px_ * T + 8 - view.w * T / 2)), Math.min(maxY, Math.max(minY, py_ * T + 8 - view.h * T / 2))];
+  const cx = px_ + 0.5, cy = py_ + 0.5;
+  const sw = safe.x1 - safe.x0, sh = safe.y1 - safe.y0;
+  const ax = (sx0, sx1, vw, b0, bl, c) => {
+    // whole map fits in the safe band: centre it there
+    if (bl <= sx1 - sx0) return b0 + bl / 2 - (sx0 + sx1) / 2;
+    // otherwise centre on Perseus, keep the map's edges on the screen edges if possible
+    let v = c - (sx0 + sx1) / 2;
+    v = Math.min(b0 + bl - vw, Math.max(b0, v));
+    // but never let Perseus leave the safe band (margin 0.6 tile)
+    const m = Math.min(0.6, (sx1 - sx0) / 2 - 0.5);
+    v = Math.min(v, c - sx0 - m); v = Math.max(v, c - sx1 + m);
+    return v;
+  };
+  return [ax(safe.x0, safe.x1, view.w, view.bx, view.bw, cx) * T, ax(safe.y0, safe.y1, view.h, view.by, view.bh, cy) * T];
 }
 function playBounds(s) {
   let x0 = s.w, y0 = s.h, x1 = -1, y1 = -1;
@@ -2522,28 +2535,35 @@ function playBounds(s) {
 }
 function setupView() {
   [view.bx, view.by, view.bw, view.bh] = playBounds(state);
-  overview = false;
+  panned = false;
   fit(true);
 }
-// size the view to the screen (see the note on view)
+// measure the screen-space safe area (layout positions; the idle fade does not change them)
+function measureSafe(W, H, px) {
+  const sr = $('stageWrap').getBoundingClientRect();
+  const R = q => { const r = document.querySelector(q).getBoundingClientRect(); return { l: r.left - sr.left, r: r.right - sr.left, t: r.top - sr.top, b: r.bottom - sr.top }; };
+  const dp = R('.dpad'), cm = R('.cmds'), tp = document.querySelector('.top').getBoundingClientRect();
+  let x0 = dp.r + 6, x1 = cm.l - 6, y0 = (tp.bottom - sr.top) + 4, y1 = H - 66; // 66px: room for the message window
+  if (x1 - x0 < px * 3) { x0 = W / 2 - px * 1.5; x1 = W / 2 + px * 1.5; }
+  if (y1 - y0 < px * 2) { y0 = H / 2 - px; y1 = H / 2 + px; }
+  safe.x0 = x0 / px; safe.x1 = x1 / px; safe.y0 = y0 / px; safe.y1 = y1 / px;
+}
 function fit(recenter) {
   if (!state) return;
   const board = $('board');
   const W = Math.max(200, board.clientWidth), H = Math.max(160, board.clientHeight);
-  const whole = Math.min(W / view.bw, H / view.bh);
-  const tile = Math.max(H / 7.5, Math.min(whole, H / 5));
+  const tile = H / 7.5 / (zoomOut ? 2 : 1);
   const cw = Math.round(W / tile * T * S), ch = Math.round(H / tile * T * S);
   if (cw !== cv.width || ch !== cv.height) {
     cv.width = cw; cv.height = ch; ctx.imageSmoothingEnabled = false;
     recenter = true;
   }
   view.w = cw / (T * S); view.h = ch / (T * S);
-  if (recenter) [cam.x, cam.y] = camTarget(state, state.player.x, state.player.y);
-  const big = view.bw > view.w + 0.01 || view.bh > view.h + 0.01;
-  $('mini').hidden = !big;
-  if (!big) overview = false;
-  $('mini').classList.toggle('on', overview);
-  if (big) sizeMini();
+  measureSafe(W, H, W / view.w);
+  if (recenter && !panned) [cam.x, cam.y] = camTarget(state, state.player.x, state.player.y);
+  mini.hidden = false;
+  mini.classList.toggle('on', zoomOut);
+  sizeMini();
 }
 window.addEventListener('resize', () => fit());
 if (window.ResizeObserver) new ResizeObserver(() => fit()).observe($('stageWrap'));
@@ -2574,33 +2594,51 @@ function drawMini(s, t) {
   for (const m of s.mobs) { mctx.fillStyle = m.awake ? '#ff4a3a' : '#c07068'; mctx.fillRect((m.x - ox) * c, (m.y - oy) * c, c, c); }
   if (s.medusa && s.medusa.alive) { mctx.fillStyle = '#7cff9a'; mctx.fillRect((s.medusa.x - ox) * c, (s.medusa.y - oy) * c, c, c); }
   if (s.boss && s.boss.alive) { mctx.fillStyle = '#ff4a3a'; mctx.fillRect((s.boss.x - ox) * c, (s.boss.y - oy) * c, c * 2, c * 2); }
-  if (Math.floor(t / 300) % 2 || overview) { mctx.fillStyle = '#ffffff'; mctx.fillRect((s.player.x - ox) * c, (s.player.y - oy) * c, c, c); }
-  if (!overview) { mctx.strokeStyle = '#ffe08a'; mctx.lineWidth = 1; mctx.strokeRect(cam.x / T * c - ox * c + 0.5, cam.y / T * c - oy * c + 0.5, view.w * c - 1, view.h * c - 1); }
+  if (Math.floor(t / 300) % 2) { mctx.fillStyle = '#ffffff'; mctx.fillRect((s.player.x - ox) * c, (s.player.y - oy) * c, c, c); }
+  mctx.strokeStyle = '#ffe08a'; mctx.lineWidth = 1; mctx.strokeRect(cam.x / T * c - ox * c + 0.5, cam.y / T * c - oy * c + 0.5, view.w * c - 1, view.h * c - 1);
 }
-// swipe or tap on the board
+// drag the board to look around; a plain tap on a sleeping guard explains it (taps never move Perseus)
 let ptr = null;
-cv.addEventListener('pointerdown', e => { ptr = { x: e.clientX, y: e.clientY, id: e.pointerId }; });
+function clampPan() {
+  const mx = view.w * 0.6, my = view.h * 0.6;
+  cam.x = Math.min((view.bx + view.bw) * T - (view.w - mx) * T, Math.max(view.bx * T - mx * T, cam.x));
+  cam.y = Math.min((view.by + view.bh) * T - (view.h - my) * T, Math.max(view.by * T - my * T, cam.y));
+}
+cv.addEventListener('pointerdown', e => { ptr = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, id: e.pointerId, drag: false }; try { cv.setPointerCapture(e.pointerId); } catch (_) {} });
+cv.addEventListener('pointermove', e => {
+  if (!ptr || ptr.id !== e.pointerId || cardMode) return;
+  if (!ptr.drag && Math.hypot(e.clientX - ptr.x, e.clientY - ptr.y) < 8) return;
+  ptr.drag = true; panned = true;
+  const r = cv.getBoundingClientRect(), k = r.width / (view.w * T);
+  cam.x -= (e.clientX - ptr.lx) / k; cam.y -= (e.clientY - ptr.ly) / k;
+  ptr.lx = e.clientX; ptr.ly = e.clientY;
+  clampPan();
+});
 cv.addEventListener('pointercancel', () => { ptr = null; });
 cv.addEventListener('pointerup', e => {
   if (!ptr || ptr.id !== e.pointerId) return;
-  const dx = e.clientX - ptr.x, dy = e.clientY - ptr.y; ptr = null;
-  if (overview) { setOverview(false); return; }
-  if (cardMode) return;
-  if (Math.max(Math.abs(dx), Math.abs(dy)) >= 24) { doAction(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'R' : 'L') : (dy > 0 ? 'D' : 'U')); return; }
-  // tap: step toward the tapped side of Perseus
+  const drag = ptr.drag; ptr = null;
+  if (drag || cardMode) return;
   const r = cv.getBoundingClientRect(), k = r.width / (view.w * T);
   const tapX = Math.floor(((e.clientX - r.left) / k + cam.x) / T), tapY = Math.floor(((e.clientY - r.top) / k + cam.y) / T);
   const tapped = state.mobs.find(m => m.x === tapX && m.y === tapY);
-  if (tapped && !tapped.awake) { inspect = { id: tapped.id, until: performance.now() + 2600 }; state.msg = '黄色のマスに入ると、この番兵が目を覚ます（壁や奈落、満ち潮の浅瀬は回り道になる）。'; msgSticky = true; shownMsg = ''; renderHud(); return; }
-  const hx = r.left + (state.player.x * T + 8 - cam.x) * k, hy = r.top + (state.player.y * T + 8 - cam.y) * k;
-  const tx = e.clientX - hx, ty = e.clientY - hy;
-  if (Math.max(Math.abs(tx), Math.abs(ty)) < 8 * k) return; // tapped Perseus himself
-  doAction(Math.abs(tx) > Math.abs(ty) ? (tx > 0 ? 'R' : 'L') : (ty > 0 ? 'D' : 'U'));
+  if (tapped && !tapped.awake) { inspect = { id: tapped.id, until: performance.now() + 2600 }; state.msg = '黄色のマスに入ると、この番兵が目を覚ます（壁や奈落、満ち潮の浅瀬は回り道になる）。'; msgSticky = true; shownMsg = ''; renderHud(); }
 });
-// tap to toggle the whole-map view
-const setOverview = on => { overview = on; mini.classList.toggle('on', on); };
-mini.addEventListener('click', e => { e.preventDefault(); if (!cardMode) setOverview(!overview); });
-document.addEventListener('keydown', e => { if ((e.key === 'm' || e.key === 'M') && !cardMode && !mini.hidden) setOverview(!overview); });
+// minimap tap (or M): toggle the fixed zoom-out
+function setZoom(on) { zoomOut = on; panned = false; fit(true); }
+mini.addEventListener('click', e => { e.preventDefault(); if (!cardMode) setZoom(!zoomOut); });
+document.addEventListener('keydown', e => { if ((e.key === 'm' || e.key === 'M') && !cardMode) setZoom(!zoomOut); });
+// idle: after 4 s without input the d-pad and commands fade; the first touch only brings them back
+let idleTimer = 0, swallowClick = false;
+const stageEl = $('stageWrap');
+function wake() { clearTimeout(idleTimer); idleTimer = setTimeout(() => { if (!cardMode && $('itemWin').hidden) stageEl.classList.add('idle'); else wake(); }, 4000); }
+document.addEventListener('pointerdown', e => {
+  if (stageEl.classList.contains('idle') && e.target.closest && e.target.closest('.dpad, .cmds')) swallowClick = true;
+  stageEl.classList.remove('idle'); wake();
+}, true);
+document.addEventListener('click', e => { if (swallowClick) { swallowClick = false; e.stopPropagation(); e.preventDefault(); } }, true);
+document.addEventListener('keydown', () => { stageEl.classList.remove('idle'); wake(); }, true);
+wake();
 $('hintBtn').addEventListener('click', () => showHint());
 document.addEventListener('keydown', e => { if ((e.key === 'h' || e.key === 'H') && !cardMode && !e.metaKey && !e.ctrlKey) showHint(); });
 
@@ -3420,10 +3458,12 @@ function render(t) {
   let pX = s.player.x, pY = s.player.y;
   if (from) { pX = lerp(from.player.x, pX, k); pY = lerp(from.player.y, pY, k); }
   // camera follows Perseus; overview fits the whole map
-  const [ctX, ctY] = camTarget(s, pX, pY);
-  cam.x += (ctX - cam.x) * 0.22; cam.y += (ctY - cam.y) * 0.22;
-  if (Math.abs(ctX - cam.x) < 0.05) cam.x = ctX;
-  if (Math.abs(ctY - cam.y) < 0.05) cam.y = ctY;
+  if (!panned) {
+    const [ctX, ctY] = camTarget(s, pX, pY);
+    cam.x += (ctX - cam.x) * 0.22; cam.y += (ctY - cam.y) * 0.22;
+    if (Math.abs(ctX - cam.x) < 0.05) cam.x = ctX;
+    if (Math.abs(ctY - cam.y) < 0.05) cam.y = ctY;
+  }
   let sc, ox, oy;
   if (overview) { sc = Math.min(cv.width / (view.bw * T), cv.height / (view.bh * T)); ox = (cv.width - view.bw * T * sc) / 2 - view.bx * T * sc; oy = (cv.height - view.bh * T * sc) / 2 - view.by * T * sc; }
   else { sc = S; ox = -Math.round(cam.x * S); oy = -Math.round(cam.y * S); }

@@ -205,81 +205,108 @@ button:focus-visible { outline: 2px solid var(--bronze); outline-offset: 2px; }
   .board.shake { animation: none; }
 }
 
-/* ===== Shiren-style layout (v52, provisional art): top bar / board (minimap + pop-up message) / control panel ===== */
-.app { gap: 6px; padding-block: max(6px, env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-bottom, 0px)); }
-.top { grid-template-columns: minmax(0, 1fr) auto auto; gap: 0 10px; padding: 4px 8px; background: var(--panel); border: 2px solid var(--line); box-shadow: 0 2px 0 #0b0f20; }
-.stage-name { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hud { display: flex; flex-direction: column; align-items: flex-end; gap: 0; }
+/* ===== landscape layout (v53, provisional art): the map fills the screen; translucent d-pad left, commands right; info along the top edge ===== */
+html, body { overflow: hidden; }
+.app { position: fixed; inset: 0; max-width: none; margin: 0; padding: 0; display: block; }
+.stage { position: absolute; inset: 0; overflow: hidden; background: #070815; }
+.board { position: absolute; inset: 0; width: auto !important; border: 0; box-shadow: none; background: #070815; }
+#cv { width: 100%; height: 100%; }
+.top { position: absolute; left: max(8px, env(safe-area-inset-left, 0px)); top: max(6px, env(safe-area-inset-top, 0px)); z-index: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; max-width: 58%; padding: 3px 10px; background: rgba(12, 16, 34, 0.55); border: 2px solid rgba(54, 65, 122, 0.7); box-shadow: none; pointer-events: none; }
+.stage-line { flex-direction: row; align-items: baseline; gap: 8px; }
+.stage-no { font-size: 9px; }
+.stage-name { font-size: 14px; line-height: 1.3; white-space: nowrap; }
+.hud { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.hearts img { width: 16px; height: 14px; }
 .hud .turns { font-size: 10px; }
-.tools { gap: 6px; }
-.ibtn { height: 36px; }
+.status { position: static; flex-basis: 100%; display: flex; gap: 4px; flex-wrap: wrap; max-width: none; line-height: 1.5; }
+.status:empty { display: none; }
+.status .chip { font-size: 10px; background: rgba(12, 16, 34, 0.7); }
+.tr { position: absolute; right: max(8px, env(safe-area-inset-right, 0px)); top: max(6px, env(safe-area-inset-top, 0px)); z-index: 3; display: flex; gap: 6px; }
+.tr .ibtn { height: 34px; background: rgba(27, 34, 68, 0.6); border-color: rgba(54, 65, 122, 0.8); }
 .ibtn.sys { width: 40px; padding: 0; font-size: 20px; line-height: 1; }
-.stage-wrap { align-items: center; justify-content: center; gap: 0; }
-.board { align-self: center; flex: none; }
-.status { position: absolute; left: 6px; top: 6px; max-width: 62%; z-index: 2; flex: none; line-height: 1.5; }
-.status .chip { background: rgba(12, 16, 34, 0.82); }
-.mini { position: absolute; right: 6px; top: 6px; z-index: 2; image-rendering: pixelated; background: rgba(6, 8, 20, 0.5); border: 2px solid rgba(226, 176, 74, 0.6); opacity: 0.72; cursor: pointer; }
-.mini.on { border-color: var(--bronze); opacity: 1; box-shadow: 0 0 0 2px #0b0f20; }
-.msgwin { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 3; margin: 0; padding: 8px 12px; background: rgba(16, 20, 42, 0.92); border: 2px solid var(--bronze); box-shadow: 0 0 0 2px #0b0f20; font-size: 14px; line-height: 1.5; color: var(--ink); cursor: pointer; animation: msgin 0.15s steps(3); }
-.msgwin.sticky::after { content: '▼'; position: absolute; right: 8px; bottom: 2px; font-size: 9px; color: var(--bronze); animation: blink 0.8s steps(2) infinite; }
+.mini { position: absolute; right: max(8px, env(safe-area-inset-right, 0px)); top: calc(max(6px, env(safe-area-inset-top, 0px)) + 42px); z-index: 3; image-rendering: pixelated; background: rgba(6, 8, 20, 0.45); border: 2px solid rgba(226, 176, 74, 0.55); opacity: 0.75; cursor: pointer; }
+.mini.on { border-color: var(--bronze); opacity: 1; }
+/* translucent controls over the map */
+.dpad { position: absolute; z-index: 4; left: max(14px, env(safe-area-inset-left, 0px)); bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(3, 54px); grid-template-rows: repeat(3, 54px); gap: 3px; }
+.dpad button { background: rgba(36, 45, 88, 0.42); border: 2px solid rgba(155, 162, 200, 0.45); box-shadow: none; color: rgba(236, 228, 207, 0.85); font-size: 20px; border-radius: 10px; }
+.dpad button:active { background: rgba(226, 176, 74, 0.45); transform: none; box-shadow: none; }
+.dpad .u { grid-column: 2; grid-row: 1; } .dpad .l { grid-column: 1; grid-row: 2; } .dpad .r { grid-column: 3; grid-row: 2; } .dpad .d { grid-column: 2; grid-row: 3; }
+.cmds { position: absolute; z-index: 4; right: max(14px, env(safe-area-inset-right, 0px)); bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: 64px 64px; grid-template-rows: 54px 64px; gap: 8px; }
+.cmd { border-radius: 50%; background: rgba(36, 45, 88, 0.45); border: 2px solid rgba(155, 162, 200, 0.5); color: rgba(236, 228, 207, 0.9); font-size: 13px; box-shadow: none; }
+.cmd:active { background: rgba(226, 176, 74, 0.45); }
+#itemBtn { grid-column: 1; grid-row: 1 / 3; align-self: center; height: 64px; }
+#waitBtn { grid-column: 2; grid-row: 1; width: 54px; height: 54px; justify-self: center; font-size: 12px; }
+.cmd.undo { grid-column: 2; grid-row: 2; width: 64px; height: 64px; border-color: rgba(226, 176, 74, 0.75); color: var(--bronze); font-size: 14px; }
+.cmd.hint, #itemBtn.hint { border-color: var(--bronze); animation: blink 0.4s steps(2) 4; }
+#itemBtn.on { border-color: var(--bronze); color: var(--bronze); }
+/* item window: opens from the 道具 button */
+.itemwin { position: absolute; z-index: 6; right: max(160px, env(safe-area-inset-right, 0px)); bottom: max(12px, env(safe-area-inset-bottom, 0px)); width: min(340px, 52vw); background: rgba(16, 20, 42, 0.95); border: 2px solid var(--bronze); box-shadow: 0 0 0 2px #0b0f20; padding: 6px 8px 8px; }
+.itemwin-head { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--bronze); margin-bottom: 4px; }
+.itemwin-head button { width: 30px; height: 30px; background: none; border: 0; color: var(--muted); font-size: 15px; }
+.itemwin .belt { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 6px; }
+.itemwin .slot { padding: 4px 2px; }
+.itemwin .slot img { width: 34px; height: 34px; }
+.itemwin .slot .nm { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.itemwin-none { margin: 4px 0; font-size: 13px; color: var(--muted); }
+/* message window: bottom centre, only when something happens */
+.msgwin { position: absolute; z-index: 5; left: max(200px, 26vw); right: max(170px, 22vw); bottom: max(10px, env(safe-area-inset-bottom, 0px)); margin: 0; padding: 7px 12px; background: rgba(16, 20, 42, 0.92); border: 2px solid var(--bronze); box-shadow: 0 0 0 2px #0b0f20; font-size: 13px; line-height: 1.5; color: var(--ink); cursor: pointer; animation: msgin 0.15s steps(3); }
+.msgwin.sticky::after { content: '▼'; position: absolute; right: 8px; bottom: 1px; font-size: 9px; color: var(--bronze); animation: blink 0.8s steps(2) infinite; }
 @keyframes msgin { from { transform: translateY(6px); opacity: 0; } }
-.panel { flex: none; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; padding: 12px 10px 8px; background: var(--panel); border-top: 6px solid transparent; border-image: repeating-linear-gradient(90deg, var(--bronze) 0 6px, var(--bronze-deep) 6px 12px) 6; box-shadow: 0 -2px 0 #0b0f20; }
-.panel .dpad { display: grid; grid-template-columns: repeat(3, 58px); grid-template-rows: repeat(3, 52px); gap: 4px; align-self: center; }
-.panel .dpad button { font-size: 20px; }
-.panel .dpad .w { font-size: 12px; }
-.side { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.side .belt { gap: 6px; }
-.side .slot { padding: 4px 2px 2px; }
-.side .slot img { width: 30px; height: 30px; }
-.side .slot .nm { font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.undo { height: 54px; font-size: 18px; background: var(--panel-2); border: 2px solid var(--bronze); color: var(--bronze); box-shadow: 0 3px 0 #0b0f20; }
-.undo:active { transform: translateY(2px); box-shadow: 0 1px 0 #0b0f20; }
-.syslist { display: flex; flex-direction: column; gap: 8px; }
-.syslist button { text-align: left; padding: 12px 14px; background: var(--panel-2); border: 2px solid var(--line); box-shadow: 0 3px 0 #0b0f20; font-size: 15px; }
-.loglist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
+.keys { position: absolute; left: 50%; transform: translateX(-50%); bottom: 2px; z-index: 2; font-size: 10px; color: var(--muted); opacity: 0.6; pointer-events: none; white-space: nowrap; }
+@media (pointer: coarse) { .keys { display: none; } }
+/* menus */
+.syslist { display: flex; flex-direction: column; gap: 6px; }
+.syslist button { text-align: left; padding: 9px 14px; background: var(--panel-2); border: 2px solid var(--line); box-shadow: 0 3px 0 #0b0f20; font-size: 15px; }
+.loglist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow-y: auto; }
 .loglist li { background: var(--night); padding: 6px 10px; font-size: 13px; line-height: 1.5; }
 .loglist small { display: block; font-family: var(--f-latin); font-size: 10px; color: var(--muted); }
-@media (max-width: 370px) { .panel .dpad { grid-template-columns: repeat(3, 50px); grid-template-rows: repeat(3, 46px); } }
-@media (pointer: coarse) { .keys { display: none; } }
+.card { max-height: calc(100vh - 24px); }
+.veil { padding: 12px; }
+@media (max-height: 420px) { .card { padding: 14px 18px 12px; gap: 8px; } .card h2 { font-size: 20px; } .syslist button { padding: 7px 12px; font-size: 14px; } }
+/* portrait phone: ask to turn the phone */
+.rotate { display: none; }
+@media (orientation: portrait) and (pointer: coarse) {
+  .rotate { position: fixed; inset: 0; z-index: 35; display: flex; align-items: center; justify-content: center; background: #070815; color: var(--ink); text-align: center; font-size: 40px; }
+  .rotate p { font-size: 16px; margin: 12px 0 0; }
+}
 </style>
 
 <main class="app">
-  <header class="top">
-    <div class="stage-line"><span class="stage-no" id="stageNo">STAGE 01</span><span class="stage-name" id="stageName">冥府の入口</span></div>
-    <div class="hud">
-      <div class="hearts" id="hearts" aria-label="ハート"></div>
-      <div class="turns" id="turns">TURN 0</div>
+  <section class="stage" id="stageWrap">
+    <div class="board" id="board">
+      <canvas id="cv" width="1024" height="448" aria-label="ゲーム画面。スワイプかタップで移動"></canvas>
     </div>
-    <div class="tools">
+    <header class="top">
+      <div class="stage-line"><span class="stage-no" id="stageNo">STAGE 01</span><span class="stage-name" id="stageName">冥府の入口</span></div>
+      <div class="hud"><div class="hearts" id="hearts" aria-label="ハート"></div><div class="turns" id="turns">TURN 0</div></div>
+      <div class="status" id="status"></div>
+    </header>
+    <div class="tr">
       <button class="ibtn" id="hintBtn">ヒント</button>
       <button class="ibtn sys" id="sysBtn" aria-label="メニュー">≡</button>
     </div>
-  </header>
-
-  <section class="stage-wrap" id="stageWrap">
-    <div class="board" id="board">
-      <canvas id="cv" width="528" height="432" aria-label="ゲーム画面。スワイプかタップで移動"></canvas>
-      <div class="status" id="status"></div>
-      <canvas id="mini" class="mini" width="80" height="60" hidden aria-label="ミニマップ。タップで全体表示"></canvas>
-      <div class="msgwin" id="msg" hidden role="status"></div>
-    </div>
-  </section>
-
-  <section class="panel">
+    <canvas id="mini" class="mini" width="80" height="60" hidden aria-label="ミニマップ。タップで全体表示"></canvas>
     <div class="dpad" id="dpad" aria-label="移動">
       <button class="u" data-a="U" aria-label="上">▲</button>
       <button class="l" data-a="L" aria-label="左">◀</button>
-      <button class="w" data-a="wait" id="waitBtn" aria-label="待つ">待つ</button>
       <button class="r" data-a="R" aria-label="右">▶</button>
       <button class="d" data-a="D" aria-label="下">▼</button>
     </div>
-    <div class="side">
-      <div class="belt" id="belt"></div>
-      <button class="undo" id="undoBtn">もどす</button>
+    <div class="cmds">
+      <button id="itemBtn" class="cmd">道具</button>
+      <button id="waitBtn" class="cmd">待つ</button>
+      <button id="undoBtn" class="cmd undo">もどす</button>
     </div>
+    <div class="itemwin" id="itemWin" hidden role="dialog" aria-label="道具">
+      <div class="itemwin-head">道具<button id="itemClose" aria-label="閉じる">✕</button></div>
+      <div class="belt" id="belt"></div>
+      <p class="itemwin-none" id="itemNone" hidden>この面で使える道具はない</p>
+    </div>
+    <div class="msgwin" id="msg" hidden role="status"></div>
   </section>
   <p class="keys">移動 矢印/WASD・道具 1〜6・待つ Space・もどす Z・やり直し R・ヒント H・全体表示 M</p>
 </main>
+<div class="rotate" id="rotate"><div>📱↻<p>横向きにして遊んでください</p></div></div>
 
 <div class="title" id="title">
   <div class="title-shade"></div>
@@ -1787,6 +1814,7 @@ function startStage(i, showIntro = true) {
   solIndex = new Map();
   if (LEVELS[i].sol) { let s = state; solIndex.set(stateKey(s), 0); [...LEVELS[i].sol].forEach((c, k) => { s = act(s, CODE_MOVE[c]); if (!solIndex.has(stateKey(s))) solIndex.set(stateKey(s), k + 1); }); }
   torches = findTorches(state);
+  closeItems();
   setupView();
   shownMsg = state.msg; hideMsg();
   renderHud();
@@ -1915,8 +1943,8 @@ function renderHud() {
   const mapChars = lv.map.join('');
   const ITEM_CHAR = { helm: 'H', harpe: 'S', sandal: 'W', shield: 'M', head: 'N', trident: 'Y' };
   beltItems = ITEM_KEYS.filter(it => state.inv[it] > 0 || mapChars.includes(ITEM_CHAR[it]));
-  belt.hidden = !beltItems.length;
-  belt.style.gridTemplateColumns = 'repeat(' + (beltItems.length > 4 ? 3 : 2) + ', minmax(0, 1fr))';
+  belt.hidden = !beltItems.length; $('itemNone').hidden = !!beltItems.length;
+  $('itemBtn').classList.toggle('armed', !!state.armed);
   beltItems.forEach((it, i) => {
     const b = document.createElement('button');
     const n = state.inv[it];
@@ -1924,7 +1952,7 @@ function renderHud() {
     b.innerHTML = '<span class="kb">' + (i + 1) + '</span><span class="ct">×' + n + '</span><img alt="" src="' + URL_OF[it] + '"><span class="nm">' + ITEM_NAME[it] + '</span>';
     b.title = ITEM_NAME[it] + '：' + ITEM_DESC[it];
     b.setAttribute('aria-label', ITEM_NAME[it] + ' 残り' + n + '。' + ITEM_DESC[it]);
-    b.addEventListener('click', () => doAction(it));
+    b.addEventListener('click', () => { closeItems(); doAction(it); });
     belt.appendChild(b);
   });
 }
@@ -2458,17 +2486,29 @@ document.addEventListener('keydown', e => {
   const a = KEYMAP[e.key];
   if (a) { e.preventDefault(); doAction(a); }
 });
-document.querySelectorAll('.dpad button').forEach(b => b.addEventListener('click', () => doAction(b.dataset.a)));
+document.querySelectorAll('.dpad button').forEach(b => b.addEventListener('click', () => { closeItems(); doAction(b.dataset.a); }));
 $('undoBtn').addEventListener('click', undo);
-$('sysBtn').addEventListener('click', () => { if (!cardMode) openCard('sys'); });
+$('sysBtn').addEventListener('click', () => { if (!cardMode) { closeItems(); openCard('sys'); } });
+// the 道具 button opens a small window of the gear on this stage; choosing one uses it and closes the window
+function openItems() { if (cardMode || state.status !== 'play') return; $('itemWin').hidden = false; $('itemBtn').classList.add('on'); }
+function closeItems() { $('itemWin').hidden = true; $('itemBtn').classList.remove('on'); }
+$('itemBtn').addEventListener('click', () => ($('itemWin').hidden ? openItems() : closeItems()));
+$('itemClose').addEventListener('click', closeItems);
+$('waitBtn').addEventListener('click', () => { closeItems(); doAction('wait'); });
 function toggleSound() { soundOn = !soundOn; }
 // ---------- view, camera & touch ----------
-// tiles visible at once: about 7 across on a phone (big tiles), as many rows as the board area holds; larger maps scroll
-const VIEW_COLS = 7, VIEW_MAX_H = 13;
-const view = { w: 7, h: 9, bx: 0, by: 0, bw: 11, bh: 9 };
+// landscape: the map fills the screen. A map that fits is shown whole (tiles at most 1/5 of the height);
+// a larger one keeps tiles at least 1/7.5 of the height and the camera follows Perseus
+const view = { w: 16, h: 7, bx: 0, by: 0, bw: 11, bh: 9 };
 const cam = { x: 0, y: 0 };
 let overview = false;
 function camTarget(s, px_, py_) {
+  if (view.w >= view.bw && view.h >= view.bh) return [(view.bx + view.bw / 2) * T - view.w * T / 2, (view.by + view.bh / 2) * T - view.h * T / 2];
+  if (view.w >= view.bw) { const r = camTarget1(s, px_, py_); return [(view.bx + view.bw / 2) * T - view.w * T / 2, r[1]]; }
+  if (view.h >= view.bh) { const r = camTarget1(s, px_, py_); return [r[0], (view.by + view.bh / 2) * T - view.h * T / 2]; }
+  return camTarget1(s, px_, py_);
+}
+function camTarget1(s, px_, py_) {
   const minX = view.bx * T, minY = view.by * T;
   const maxX = Math.max(minX, (view.bx + view.bw - view.w) * T), maxY = Math.max(minY, (view.by + view.bh - view.h) * T);
   return [Math.min(maxX, Math.max(minX, px_ * T + 8 - view.w * T / 2)), Math.min(maxY, Math.max(minY, py_ * T + 8 - view.h * T / 2))];
@@ -2485,22 +2525,21 @@ function setupView() {
   overview = false;
   fit(true);
 }
-// size the view to the board area: fixed big tiles, the camera scrolls when the map is larger
+// size the view to the screen (see the note on view)
 function fit(recenter) {
   if (!state) return;
-  const wrap = $('stageWrap'), board = $('board');
-  const W = Math.max(160, wrap.clientWidth - 6), H = Math.max(160, wrap.clientHeight - 6);
-  const tile = Math.min(W / Math.min(view.bw, VIEW_COLS), H / Math.min(view.bh, 5));
-  const w = Math.max(1, Math.min(view.bw, Math.floor(W / tile + 0.01))), h = Math.max(1, Math.min(view.bh, VIEW_MAX_H, Math.floor(H / tile + 0.01)));
-  if (w !== view.w || h !== view.h || cv.width !== w * T * S) {
-    view.w = w; view.h = h;
-    cv.width = view.w * T * S; cv.height = view.h * T * S;
-    ctx.imageSmoothingEnabled = false;
+  const board = $('board');
+  const W = Math.max(200, board.clientWidth), H = Math.max(160, board.clientHeight);
+  const whole = Math.min(W / view.bw, H / view.bh);
+  const tile = Math.max(H / 7.5, Math.min(whole, H / 5));
+  const cw = Math.round(W / tile * T * S), ch = Math.round(H / tile * T * S);
+  if (cw !== cv.width || ch !== cv.height) {
+    cv.width = cw; cv.height = ch; ctx.imageSmoothingEnabled = false;
     recenter = true;
   }
-  board.style.width = Math.round(w * tile + 6) + 'px';
+  view.w = cw / (T * S); view.h = ch / (T * S);
   if (recenter) [cam.x, cam.y] = camTarget(state, state.player.x, state.player.y);
-  const big = view.bw > view.w || view.bh > view.h;
+  const big = view.bw > view.w + 0.01 || view.bh > view.h + 0.01;
   $('mini').hidden = !big;
   if (!big) overview = false;
   $('mini').classList.toggle('on', overview);
@@ -2516,7 +2555,7 @@ const MINI_CELL = 4;
 function sizeMini() {
   const w = view.bw * MINI_CELL, h = view.bh * MINI_CELL;
   if (mini.width !== w || mini.height !== h) { mini.width = w; mini.height = h; }
-  const boardW = $('board').clientWidth, maxW = Math.min(96, boardW * 0.26), maxH = 84;
+  const maxW = 130, maxH = Math.max(50, $('board').clientHeight * 0.26);
   const k = Math.min(maxW / w, maxH / h);
   mini.style.width = Math.round(w * k) + 'px'; mini.style.height = Math.round(h * k) + 'px';
 }
@@ -2649,7 +2688,7 @@ function moveText(a) {
     return state.armed ? DIRJ[a] + 'へ跳ぶ' : moved ? DIRJ[a] + 'へ進む' : DIRJ[a] + 'を向く';
   }
   hintMark = null;
-  const el = a === 'wait' ? $('waitBtn') : $('belt').children[beltItems.indexOf(a)];
+  const el = a === 'wait' ? $('waitBtn') : $('itemBtn');
   if (el) { el.classList.remove('hint'); void el.offsetWidth; el.classList.add('hint'); }
   return { wait: 'その場で待つ', helm: 'ハデスの兜をかぶる', harpe: 'ハルペーの鎌を振るう', sandal: state.armed ? '翼をたたむ' : '翼のサンダルを構える', shield: '鏡の盾を構える', head: 'メドゥーサの紋章を掲げる', trident: 'ポセイドンの三叉槍で潮を' + (state.sea === 1 ? '引かせる' : '満たす') }[a];
 }

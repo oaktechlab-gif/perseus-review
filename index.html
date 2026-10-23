@@ -266,6 +266,16 @@ html, body { overflow: hidden; }
 .loglist small { display: block; font-family: var(--f-latin); font-size: 10px; color: var(--muted); }
 .card { max-height: calc(100vh - 24px); }
 .veil { padding: 12px; }
+/* cards fit the visible height (dvh): body scrolls, the buttons row stays at the bottom; intro puts the new enemy/gear on the right */
+.veil { padding: 8px max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px)); }
+.card { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow: hidden; display: flex; flex-direction: column; }
+.card.wide { max-width: min(780px, 100%); }
+.cbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: inherit; overscroll-behavior: contain; }
+.cfoot { flex: none; }
+.cfoot .row { margin-top: 0; }
+.ccols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 16px; align-items: start; }
+.ccols > div { display: flex; flex-direction: column; gap: 8px; }
+.ccols .newitem { margin: 0; }
 @media (max-height: 420px) { .card { padding: 14px 18px 12px; gap: 8px; } .card h2 { font-size: 20px; } .syslist button { padding: 7px 12px; font-size: 14px; } }
 /* portrait phone: ask to turn the phone */
 .rotate { display: none; }
@@ -2447,6 +2457,20 @@ function openCard(mode) {
     html += '<div class="row"><button data-c="close">閉じる</button></div>';
   }
   card.innerHTML = html;
+  // layout: last buttons row → fixed footer, the rest → scrolling body; intro with new things → two columns
+  const kids = [...card.children];
+  const foot = kids.length > 1 && kids[kids.length - 1].classList.contains('row') ? kids.pop() : null;
+  const body = document.createElement('div'); body.className = 'cbody';
+  const side = mode === 'intro' ? kids.filter(k => k.classList.contains('newitem')) : [];
+  if (side.length) {
+    const cols = document.createElement('div'); cols.className = 'ccols';
+    const L = document.createElement('div'), R = document.createElement('div');
+    kids.forEach(k => (side.includes(k) ? R : L).appendChild(k));
+    cols.append(L, R); body.appendChild(cols);
+  } else kids.forEach(k => body.appendChild(k));
+  card.replaceChildren(body);
+  if (foot) { const f = document.createElement('div'); f.className = 'cfoot'; f.appendChild(foot); card.appendChild(f); }
+  card.classList.toggle('wide', !!side.length || mode === 'menu' || mode === 'rank');
   $('veil').hidden = false;
   if (mode === 'win' || mode === 'rank') fillRankLists();
   const first = card.querySelector('button.primary') || card.querySelector('button:not([disabled])');
@@ -2554,7 +2578,7 @@ function fit(recenter) {
   if (!state) return;
   const board = $('board');
   const W = Math.max(200, board.clientWidth), H = Math.max(160, board.clientHeight);
-  const tile = H / 7.5 / (zoomOut ? 2 : 1);
+  const tile = H / 7.5 / (zoomOut ? 1.5 : 1);
   const cw = Math.round(W / tile * T * S), ch = Math.round(H / tile * T * S);
   if (cw !== cv.width || ch !== cv.height) {
     cv.width = cw; cv.height = ch; ctx.imageSmoothingEnabled = false;

@@ -2509,22 +2509,26 @@ const view = { w: 16, h: 7, bx: 0, by: 0, bw: 11, bh: 9 };
 const cam = { x: 0, y: 0 };
 const overview = false; // (old whole-map view, retired)
 let zoomOut = false, panned = false;
-const safe = { x0: 0, y0: 0, x1: 16, y1: 7 }; // in tiles, relative to the view's top-left
+let keep = []; // keep-out rectangles (d-pad, commands, top bar, minimap, message window) in tiles, relative to the view
 function camTarget(s, px_, py_) {
   const cx = px_ + 0.5, cy = py_ + 0.5;
-  const sw = safe.x1 - safe.x0, sh = safe.y1 - safe.y0;
-  const ax = (sx0, sx1, vw, b0, bl, c) => {
-    // whole map fits in the safe band: centre it there
-    if (bl <= sx1 - sx0) return b0 + bl / 2 - (sx0 + sx1) / 2;
-    // otherwise centre on Perseus, keep the map's edges on the screen edges if possible
-    let v = c - (sx0 + sx1) / 2;
-    v = Math.min(b0 + bl - vw, Math.max(b0, v));
-    // but never let Perseus leave the safe band (margin 0.6 tile)
-    const m = Math.min(0.6, (sx1 - sx0) / 2 - 0.5);
-    v = Math.min(v, c - sx0 - m); v = Math.max(v, c - sx1 + m);
-    return v;
-  };
-  return [ax(safe.x0, safe.x1, view.w, view.bx, view.bw, cx) * T, ax(safe.y0, safe.y1, view.h, view.by, view.bh, cy) * T];
+  // follow Perseus with the map's edges on the screen edges; a map smaller than the screen is centred
+  const ax = (vw, b0, bl, c) => bl <= vw ? b0 + bl / 2 - vw / 2 : Math.min(b0 + bl - vw, Math.max(b0, c - vw / 2));
+  let vx = ax(view.w, view.bx, view.bw, cx), vy = ax(view.h, view.by, view.bh, cy);
+  // only if Perseus would sit under a control, shift the least needed to clear it (past the map edge if need be)
+  const m = 0.15;
+  for (let it = 0; it < 4; it++) {
+    const x0 = cx - vx - 0.5 - m, x1 = cx - vx + 0.5 + m, y0 = cy - vy - 0.5 - m, y1 = cy - vy + 0.5 + m;
+    const r = keep.find(k => x1 > k.x0 && x0 < k.x1 && y1 > k.y0 && y0 < k.y1);
+    if (!r) break;
+    const opts = [['x', x1 - r.x0], ['x', x0 - r.x1], ['y', y1 - r.y0], ['y', y0 - r.y1]]
+      .filter(([a, d]) => { const lo = (a === 'x' ? x0 : y0) - d, hi = (a === 'x' ? x1 : y1) - d, lim = a === 'x' ? view.w : view.h; return lo >= 0 && hi <= lim; });
+    if (!opts.length) break;
+    opts.sort((p, q) => Math.abs(p[1]) - Math.abs(q[1]));
+    const [a, d] = opts[0];
+    if (a === 'x') vx += d; else vy += d;
+  }
+  return [vx * T, vy * T];
 }
 function playBounds(s) {
   let x0 = s.w, y0 = s.h, x1 = -1, y1 = -1;
@@ -2538,15 +2542,13 @@ function setupView() {
   panned = false;
   fit(true);
 }
-// measure the screen-space safe area (layout positions; the idle fade does not change them)
+// measure the keep-out rectangles (layout positions; the idle fade does not change them)
 function measureSafe(W, H, px) {
   const sr = $('stageWrap').getBoundingClientRect();
-  const R = q => { const r = document.querySelector(q).getBoundingClientRect(); return { l: r.left - sr.left, r: r.right - sr.left, t: r.top - sr.top, b: r.bottom - sr.top }; };
-  const dp = R('.dpad'), cm = R('.cmds'), tp = document.querySelector('.top').getBoundingClientRect();
-  let x0 = dp.r + 6, x1 = cm.l - 6, y0 = (tp.bottom - sr.top) + 4, y1 = H - 66; // 66px: room for the message window
-  if (x1 - x0 < px * 3) { x0 = W / 2 - px * 1.5; x1 = W / 2 + px * 1.5; }
-  if (y1 - y0 < px * 2) { y0 = H / 2 - px; y1 = H / 2 + px; }
-  safe.x0 = x0 / px; safe.x1 = x1 / px; safe.y0 = y0 / px; safe.y1 = y1 / px;
+  const R = el => { const r = el.getBoundingClientRect(); return { x0: (r.left - sr.left) / px, x1: (r.right - sr.left) / px, y0: (r.top - sr.top) / px, y1: (r.bottom - sr.top) / px }; };
+  keep = ['.dpad', '.cmds', '.top', '.tr', '#mini'].map(q => document.querySelector(q)).filter(el => el && !el.hidden).map(R);
+  // the message window's slot along the bottom centre (it may be hidden now, but must not cover Perseus when it appears)
+  keep.push({ x0: Math.max(200, W * 0.26) / px, x1: (W - Math.max(170, W * 0.22)) / px, y0: (H - 66) / px, y1: H / px });
 }
 function fit(recenter) {
   if (!state) return;

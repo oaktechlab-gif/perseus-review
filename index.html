@@ -3847,7 +3847,7 @@ function showTitle() {
 }
 function leaveTitle(i, menu) { $('title').hidden = true; if (menu) { openCard('menu'); return; } startStage(i); }
 $('tContinue').addEventListener('click', () => leaveTitle(Math.min(progress.unlocked, LEVELS.length - 1)));
-$('tNew').addEventListener('click', () => leaveTitle(0));
+$('tNew').addEventListener('click', () => { $('title').hidden = true; startStage(0, false); playOpening(1, () => openCard('intro')); }); // a new game always starts with the prologue
 $('tSelect').addEventListener('click', () => leaveTitle(stageIdx, true));
 loadArt().then(() => { startStage(stageIdx, false); showTitle(); requestAnimationFrame(render); });
 })();

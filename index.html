@@ -130,10 +130,11 @@ button:focus-visible { outline: 2px solid var(--bronze); outline-offset: 2px; }
 .op { position: fixed; inset: 0; z-index: 40; background: #000; display: flex; align-items: center; justify-content: center; }
 .op[hidden] { display: none !important; }
 #opCv { width: 100%; height: 100%; image-rendering: pixelated; }
-.op-text { position: absolute; left: 12px; right: 12px; bottom: 16%; margin: 0; text-align: center; font-size: clamp(12px, calc((100vw - 28px) / 24.5), 17px); line-height: 1.6; color: #f7ecd2; text-shadow: 0 2px 0 #000, 0 0 10px #000; transition: opacity 0.4s; }
-.op-text.top { bottom: auto; top: 12%; }
+.op-text { position: absolute; left: max(14%, 90px); right: max(14%, 90px); bottom: max(26px, 7%); margin: 0; padding: 8px 16px; text-align: center; font-size: clamp(13px, 2.2vw, 18px); line-height: 1.6; color: #f7ecd2; background: rgba(10, 12, 30, 0.72); border: 2px solid rgba(217, 183, 95, 0.75); box-shadow: 0 0 0 2px #0b0f20; opacity: 0; transition: opacity 0.35s; }
+.op-text.talk { text-align: left; }
+.op-who { display: block; font-size: 0.75em; color: var(--bronze); margin-bottom: 1px; }
 .op-skip { position: absolute; right: 14px; top: max(14px, env(safe-area-inset-top, 0px)); height: 34px; padding: 0 12px; font-size: 12px; background: rgba(18, 23, 46, 0.7); border: 2px solid var(--line); }
-.op-hint { position: absolute; bottom: max(18px, env(safe-area-inset-bottom, 0px)); width: 100%; text-align: center; font-size: 11px; color: var(--muted); }
+.op-hint { position: absolute; bottom: max(6px, env(safe-area-inset-bottom, 0px)); width: 100%; text-align: center; font-size: 10px; color: var(--muted); opacity: 0.7; }
 .chap .opbtn { margin-left: 8px; font-size: 11px; padding: 2px 8px; background: var(--panel-2); border: 2px solid var(--line); }
 .title { position: fixed; inset: 0; z-index: 30; background: #070815 center / cover no-repeat; display: flex; flex-direction: column; justify-content: space-between; align-items: center; padding: max(28px, env(safe-area-inset-top, 0px)) 20px max(28px, env(safe-area-inset-bottom, 0px)); }
 .title[hidden] { display: none !important; }
@@ -2057,58 +2058,113 @@ function onWin() {
   saveProgress(progress);
   lastResult = { rec, prev, newBest, flawless: rec.h === state.maxHearts, divine: isDivine(stageIdx, rec), stars: gotStars, starUp: gotStars > prevStars };
   submitScore(stageIdx, rec);
-  SFX.win(); openCard('win');
+  SFX.win();
+  // a chapter's boss: its ending movie plays once (it can be watched again from the stage list), then the clear card
+  const endId = LEVELS[stageIdx].boss && CHAPTER_END_MOVIE[chapterOf(stageIdx)];
+  progress.seenEnd = progress.seenEnd || {};
+  if (endId && !progress.seenEnd[endId]) { progress.seenEnd[endId] = true; saveProgress(progress); setTimeout(() => playMovies([endId], () => openCard('win')), 900); }
+  else openCard('win');
 }
 
-// ---------- chapter openings: a data-driven moving picture-story ----------
-// scene = background + camera move (from/to: [x, y, zoom]) + sprites + effects (fx) + timed cues + one line of text.
-// bx/by and fx coordinates are fractions of the background picture, so they follow the camera.
-const OPENINGS = {
-  1: { tapOnly: true, amb: 'waves', title: ['第1章', 'ゴーゴンの島へ'], scenes: [
-    { layers: [{ img: 'P_s1_sky', depth: 0.15, drift: 3 }, { img: 'P_s1_mid', depth: 0.5, bob: 0.5 }, { img: 'P_s1_front', depth: 1 }],
-      from: [0.25, 0.55, 1.0], to: [0.55, 0.68, 1.15], dur: 4200, textTop: true,
-      sprites: [{ img: 'P_danae', bx: 0.58, by: 0.73 }, { hero: true, pose: 'D', k: 1.2, bx: 0.47, by: 0.8 }],
-      fx: [{ type: 'sparkle', layer: 0, x0: 0.1, x1: 0.9, y0: 0.05, y1: 0.4, n: 8 }],
-      text: 'セリポス島に、母と暮らす少年ペルセウスがいた。' },
-    { layers: [{ img: 'P_s2_sky', depth: 0.3 }, { img: 'P_s2_mid', depth: 0.6 }, { img: 'P_s2_front', depth: 1 }],
-      from: [0.6, 0.42, 1.0], to: [0.7, 0.45, 1.12], dur: 4200, amb: 'cave', tint: 'rgba(80,0,20,0.12)',
-      sprites: [{ frames: ['P_king0'], bx: 0.74, by: 0.47, after: { at: 0.3, frames: ['P_king1'] } }],
-      fx: [{ type: 'embers', layer: 2, pts: [[0.06, 0.38], [0.92, 0.38]] }, { type: 'glow', layer: 2, pts: [[0.06, 0.38], [0.92, 0.38]], color: '255,150,60', r: 0.12 }],
-      cues: [{ at: 0.3, sfx: 'thunder', flash: 0.35, shake: 0.4 }],
-      text: '母をねらう王は命じた。「メドゥーサを退治せよ」' },
-    { layers: [{ img: 'P_s3_sky', depth: 0.2, drift: 2 }, { img: 'P_s3_mid', depth: 0.55, bob: 0.6 }, { img: 'P_s3_front', depth: 1 }],
-      from: [0.62, 0.8, 1.2], to: [0.55, 0.35, 1.0], dur: 4200, amb: 'cave',
-      sprites: [{ hero: true, pose: 'U', k: 1.2, bx: 0.66, by: 0.78 }],
-      fx: [{ type: 'rays' }, { type: 'gifts', items: ['helm', 'harpe', 'sandal', 'shield'] }, { type: 'sparkle', x0: 0.25, x1: 0.75, y0: 0.0, y1: 0.4, n: 20 }],
-      cues: [{ at: 0.05, sfx: 'chime' }],
-      text: '母を守るため、少年は神々の道具を手に旅立つ。' },
-    { layers: [{ img: 'P_s4_sky', depth: 0.15, drift: 3 }, { img: 'P_s4_mid', depth: 0.5, bob: 0.5 }, { img: 'P_s4_front', depth: 1 }],
-      from: [0.55, 0.8, 1.2], to: [0.62, 0.28, 1.15], dur: 4200,
-      fx: [{ type: 'eyes', layer: 1, pts: [[0.585, 0.305], [0.612, 0.305]], from: 0.55 }, { type: 'glint', layer: 1, x0: 0.1, x1: 0.8, y0: 0.82, y1: 0.95, n: 12 }],
-      cues: [{ at: 0.55, sfx: 'growl' }],
-      text: '島で待つのは、目が合えば人を石に変える怪物。' },
+// ---------- movies (landscape picture-story): background 384x256 dots + 128-dot actors + subtitles ----------
+// cut = { bg, cam: [cx0, cy0, z0, cx1, cy1, z1] (centre as a share of the background, zoom), actors, lines, fx, cues, amb }
+// actor = { k: picture key, x: share of the width, y: feet height as a share (default 0.86), far: drawn at half size, flip }
+// line = text or [speaker, text]; a tap shows the next line, then the next cut. Pictures that have not arrived yet are drawn as labelled stand-ins.
+const MOVIES = {
+  P: { amb: 'waves', cuts: [
+    { bg: 'BG01', cam: [0.5, 0.56, 1.0, 0.54, 0.58, 1.08], actors: [{ k: 'perseus', x: 0.42 }, { k: 'danae', x: 0.58 }], fx: [{ type: 'sparkle', x0: 0.1, x1: 0.9, y0: 0.05, y1: 0.35, n: 8 }], lines: ['セリポス島に、母と暮らす少年がいた。'] },
+    { bg: 'BG02', amb: 'cave', tint: 'rgba(80,0,20,0.10)', cam: [0.55, 0.55, 1.05, 0.62, 0.56, 1.15], actors: [{ k: 'kingOrder', x: 0.72 }, { k: 'perseusBack', x: 0.32 }], cues: [{ at: 0.25, sfx: 'thunder', flash: 0.3, shake: 0.3 }], lines: [['王', '「メドゥーサを退治してこい」'], '生きて帰れぬと見込んだ、王の命令だった。'] },
+    { bg: 'BG03', cam: [0.5, 0.5, 1.12, 0.5, 0.58, 1.0], actors: [{ k: 'perseusBack', x: 0.5 }], fx: [{ type: 'glint', x0: 0.2, x1: 0.8, y0: 0.6, y1: 0.75, n: 14 }], lines: ['母を守るため、少年は旅立つ。'] },
+    { bg: 'BG04', amb: null, cam: [0.5, 0.62, 1.0, 0.5, 0.45, 1.1], fx: [{ type: 'rays' }, { type: 'sparkle', x0: 0.1, x1: 0.9, y0: 0.05, y1: 0.6, n: 16 }], cues: [{ at: 0.05, sfx: 'chime' }], lines: ['その姿を、神々が見ていた。'] },
   ] },
-  2: { tapOnly: true, amb: 'waves', title: ['第2章', 'アンドロメダと海の怪物'], scenes: [
-    { layers: [{ img: 'L_rock_sky', depth: 0.15, drift: 4 }, { img: 'L_rock_mid', depth: 0.5, bob: 1 }, { img: 'L_rock_front', depth: 1 }],
-      from: [0.56, 0.3, 1.0], to: [0.56, 0.34, 1.12], dur: 3000,
-      sprites: [{ frames: ['L_andromeda0', 'L_andromeda1'], fps: 2.5, bx: 0.5, by: 0.285 }],
-      fx: [{ type: 'spray', y: 0.7 }],
-      text: '帰り道の海辺で、岩につながれた王女を見つけた。' },
-    { layers: [{ img: 'L_sea_sky', depth: 0.15, drift: 3 }, { img: 'L_sea_far', depth: 0.45, bob: 1.5 }, { img: 'L_sea_waves', depth: 1, bob: 4, sway: 3 }],
-      from: [0.5, 0.62, 1.15], to: [0.5, 0.56, 1.0], dur: 3400, amb: 'storm',
-      sprites: [{ frames: ['cetus0', 'cetus1'], fps: 3, layer: 1, k: 1.2, bx: 0.52, by: 0.5, fx: 'rise', after: { at: 0.6, frames: ['cetusRoar'] } }],
-      fx: [{ type: 'rain' }, { type: 'spray', y: 0.6 }],
-      cues: [{ at: 0.6, sfx: 'roar', shake: 0.9, flash: 0.8 }],
-      text: '王女は、海の怪物ケートスへの生けにえだという。' },
-    { layers: [{ img: 'L_coast_sky', depth: 0.1, drift: 2 }, { img: 'L_coast_mid', depth: 0.4, dy: 0.07 }, { img: 'L_coast_front', depth: 1 }],
-      from: [0.6, 0.42, 1.0], to: [0.32, 0.85, 1.35], dur: 3200, textTop: true,
-      sprites: [{ hero: true, k: 0.7, walk: { from: [-0.05, 0.905], to: [0.4, 0.9], until: 0.85 } }],
-      fx: [{ type: 'sparkle', layer: 0, x0: 0.05, x1: 0.95, y0: 0.03, y1: 0.4, n: 18 }, { type: 'glint', layer: 1, x0: 0.3, x1: 0.6, y0: 0.6, y1: 0.68, n: 14 }],
-      text: '海神の三叉槍を手に、少年は荒れる海へ向かう。' },
+  '0-1': { amb: null, cuts: [
+    { bg: 'BG05', cam: [0.5, 0.58, 1.0, 0.52, 0.58, 1.06], actors: [{ k: 'perseus', x: 0.3 }, { k: 'nymphBag', x: 0.66 }], fx: [{ type: 'sparkle', x0: 0.2, x1: 0.8, y0: 0.3, y1: 0.8, n: 14 }], lines: [['ニンフ', '「この袋を持ってお行き」'], ['ニンフ', '「袋には、神々の道具が入るのです」']] },
+    { bg: 'BG05', cam: [0.52, 0.58, 1.06, 0.55, 0.58, 1.12], actors: [{ k: 'perseus', x: 0.3 }, { k: 'nymphSickle', x: 0.66 }], fx: [{ type: 'sparkle', x0: 0.2, x1: 0.8, y0: 0.3, y1: 0.8, n: 14 }], lines: [['ニンフ', '「ヘルメス様から預かった鎌です」'], ['ニンフ', '「この刃なら、どんな怪物にも届く」']] },
+  ] },
+  '0-2': { amb: null, cuts: [
+    { bg: 'BG06', cam: [0.5, 0.55, 1.0, 0.55, 0.58, 1.08], actors: [{ k: 'perseus', x: 0.3 }, { k: 'hermes', x: 0.66 }], fx: [{ type: 'clouds', y1: 0.25 }], lines: [['ヘルメス', '「鎌は受け取ったか」'], ['ヘルメス', '「これも必要になる。貸してやろう」'], ['ヘルメス', '「地を蹴れ。奈落も敵も、飛び越えよ」']] },
+  ] },
+  '0-3': { amb: 'cave', cuts: [
+    { bg: 'BG07', cam: [0.5, 0.45, 1.0, 0.5, 0.6, 1.1], actors: [{ k: 'perseusBack', x: 0.5 }], lines: ['兜を借りるため、少年は冥府を訪ねた。'] },
+    { bg: 'BG08', cam: [0.55, 0.56, 1.05, 0.6, 0.58, 1.12], actors: [{ k: 'perseus', x: 0.3 }, { k: 'hades', x: 0.66 }], fx: [{ type: 'glow', pts: [[0.62, 0.55]], color: '170,90,255', r: 0.12 }], lines: [['ハデス', '「これをかぶれば、生者の目には映らぬ」'], ['ハデス', '「用が済んだら、必ず返しに来い」']] },
+  ] },
+  '0-4': { amb: 'cave', cuts: [
+    { bg: 'BG07', cam: [0.5, 0.58, 1.08, 0.52, 0.56, 1.0], actors: [{ k: 'perseus', x: 0.3 }, { k: 'athena', x: 0.66 }], fx: [{ type: 'rays' }, { type: 'sparkle', x0: 0.5, x1: 0.85, y0: 0.2, y1: 0.8, n: 12 }], cues: [{ at: 0.05, sfx: 'chime' }], lines: [['アテナ', '「この盾が、一度だけお前を守る」'], ['アテナ', '「その目を、直接見てはならぬ」']] },
+  ] },
+  1: { amb: 'cave', title: ['第1章', 'ゴーゴンの島へ'], cuts: [
+    { bg: 'BG09', cam: [0.4, 0.58, 1.0, 0.55, 0.58, 1.1], actors: [{ k: 'perseusGear', x: 0.45 }], lines: ['神々の道具を手に、少年は冥府へ降りた。'] },
+    { bg: 'BG10', cam: [0.3, 0.55, 1.15, 0.7, 0.55, 1.15], lines: ['奥には、石にされた戦士たちが並んでいた。'] },
+    { bg: 'BG11', cam: [0.5, 0.5, 1.0, 0.5, 0.45, 1.25], fx: [{ type: 'eyes', pts: [[0.485, 0.42], [0.515, 0.42]], from: 0.35 }], cues: [{ at: 0.35, sfx: 'growl' }], lines: ['目が合えば人を石に変える怪物が待つ。'] },
+  ] },
+  '1E': { amb: 'cave', cuts: [
+    { bg: 'BG09', tint: 'rgba(0,0,0,0.35)', cam: [0.5, 0.5, 1.2, 0.5, 0.5, 1.3], actors: [{ k: 'bagGlow', x: 0.5, y: 0.75 }], fx: [{ type: 'glow', pts: [[0.5, 0.55]], color: '255,210,110', r: 0.2 }], cues: [{ at: 0.1, sfx: 'chime' }], lines: ['メドゥーサを封じた紋章が、袋の中で光る。'] },
+    { bg: 'BG12', amb: 'waves', cam: [0.4, 0.56, 1.0, 0.5, 0.56, 1.06], actors: [{ k: 'perseus', x: 0.3 }], fx: [{ type: 'spray', y: 0.72 }], lines: ['紋章を手に、母のもとへ急ぐペルセウス。', '海辺の岩場から、助けを呼ぶ声がした。'] },
+  ] },
+  2: { amb: 'waves', title: ['第2章', 'アンドロメダと海の怪物'], cuts: [
+    { bg: 'BG12', cam: [0.55, 0.5, 1.1, 0.65, 0.5, 1.2], actors: [{ k: 'andromedaChain', x: 0.7, y: 0.66 }], fx: [{ type: 'spray', y: 0.72 }], lines: ['帰り道の海辺で、岩につながれた王女を見つけた。'] },
+    { bg: 'BG14', amb: 'storm', cam: [0.5, 0.6, 1.15, 0.5, 0.52, 1.0], actors: [{ k: 'cetus', x: 0.6, y: 0.8, rise: true, roarAt: 0.6 }], fx: [{ type: 'rain' }, { type: 'spray', y: 0.7 }], cues: [{ at: 0.6, sfx: 'roar', shake: 0.9, flash: 0.6 }], lines: ['王女は、海の怪物ケートスへの生けにえだという。'] },
+    { bg: 'BG14', amb: 'storm', cam: [0.45, 0.58, 1.05, 0.5, 0.58, 1.1], actors: [{ k: 'perseus', x: 0.3 }, { k: 'poseidon', x: 0.66 }], fx: [{ type: 'rain' }], cues: [{ at: 0.1, sfx: 'chime' }], lines: [['ポセイドン', '「潮よ、この槍に従え」'], '海神の三叉槍を手に、少年は荒れる海へ向かう。'] },
+  ] },
+  '2E': { amb: 'waves', cuts: [
+    { bg: 'BG13', cam: [0.5, 0.56, 1.05, 0.55, 0.58, 1.1], actors: [{ k: 'perseus', x: 0.38 }, { k: 'andromedaFree', x: 0.6 }], fx: [{ type: 'glint', x0: 0.1, x1: 0.9, y0: 0.55, y1: 0.7, n: 16 }], lines: ['王女を救い、少年は故郷の島へ向かう。'] },
+    { bg: 'BG15', cam: [0.5, 0.6, 1.0, 0.5, 0.5, 1.12], actors: [{ k: 'perseusBack', x: 0.35 }], lines: ['母の待つセリポス島が、遠くに見えてきた。'] },
+  ] },
+  3: { amb: 'cave', title: ['第3章', 'セリポス帰還'], cuts: [
+    { bg: 'BG16', cam: [0.5, 0.5, 1.0, 0.6, 0.56, 1.1], actors: [{ k: 'soldier', x: 0.52, far: true }, { k: 'danae', x: 0.62, far: true }, { k: 'soldier', x: 0.72, far: true }], lines: ['故郷の島に帰ると、王はまだ母を苦しめていた。'] },
+    { bg: 'BG17', cam: [0.5, 0.58, 1.15, 0.5, 0.58, 1.0], actors: [{ k: 'soldier', x: 0.22 }, { k: 'hoplite', x: 0.34 }, { k: 'perseus', x: 0.5 }, { k: 'hoplite', x: 0.66, flip: true }, { k: 'soldier', x: 0.78, flip: true }], lines: ['王の兵士たちが、少年を取り囲む。'] },
+    { bg: 'BG17', tint: 'rgba(0,0,0,0.45)', cam: [0.5, 0.5, 1.2, 0.5, 0.5, 1.3], actors: [{ k: 'emblem', x: 0.5, y: 0.72 }], fx: [{ type: 'glow', pts: [[0.5, 0.52]], color: '255,220,120', r: 0.22 }], cues: [{ at: 0.1, sfx: 'chime' }], lines: ['手には、メドゥーサの紋章。いよいよ決着の時だ。'] },
+  ] },
+  '3E': { amb: null, cuts: [
+    { bg: 'BG02', cam: [0.55, 0.56, 1.05, 0.55, 0.58, 1.1], actors: [{ k: 'kingStone', x: 0.75 }, { k: 'perseus', x: 0.36 }, { k: 'danaeJoy', x: 0.52 }], lines: [['ペルセウス', '「母さん、もう大丈夫だ」']] },
+    { bg: 'BG18', amb: 'storm', cam: [0.5, 0.6, 1.0, 0.5, 0.4, 1.12], actors: [{ k: 'zeus', x: 0.5, y: 0.62 }], cues: [{ at: 0.2, sfx: 'thunder', flash: 0.8, shake: 0.5 }], lines: ['母を守った少年の前に、父ゼウスが現れた。'] },
+    { bg: 'BG19', amb: 'storm', cam: [0.5, 0.5, 1.0, 0.5, 0.5, 1.08], fx: [{ type: 'tear', from: 0.15 }], cues: [{ at: 0.15, sfx: 'thunder', flash: 1, shake: 0.8 }], lines: ['雷が光り、神話の頁が引き裂かれた。'] },
   ] },
 };
-const OPIMG = {};
+// which movies play where (the 0 chapter stages are not built yet, so its movies run before chapter 1 for now)
+const CHAPTER_MOVIES = { 1: ['P', '0-1', '0-2', '0-3', '0-4', 1], 2: [2], 3: [3] };
+const CHAPTER_END_MOVIE = { 1: '1E', 2: '2E', 3: '3E' };
+const OPENINGS = CHAPTER_MOVIES; // (old name, still used by the stage list)
+const OPIMG = {}, MOVIMG = {};
 let opRun = null;
+// stand-ins until the painted pictures arrive
+const BG_PH = {
+  BG01: ['セリポス島の海辺', '#8fc4ee', '#e8d8b0', '#c9b48a'], BG02: ['王宮の玉座の間', '#5a2030', '#8a5a40', '#d8cfc0'], BG03: ['夜の浜', '#0a1030', '#22305a', '#4a4a5a'],
+  BG04: ['オリュンポスの神殿', '#f0e0a0', '#fff6e0', '#e8e0d0'], BG05: ['森の泉', '#2a5a3a', '#6aa070', '#3a6040'], BG06: ['山の上の岩場', '#7ab0e8', '#d0e8ff', '#8a8070'],
+  BG07: ['冥府の入口', '#2a1a40', '#5a4060', '#3a3040'], BG08: ['冥府の玉座', '#120a20', '#30204a', '#24202a'], BG09: ['冥府の迷宮の通路', '#1a1028', '#3a2a40', '#4a3c4a'],
+  BG10: ['石像の広間', '#1a1028', '#3a2a40', '#5a5060'], BG11: ['冥府の最奥', '#020208', '#0a0814', '#141020'], BG12: ['海辺の岩場（昼）', '#7ac0f0', '#e0f0ff', '#8a7a6a'],
+  BG13: ['海辺の岩場（夕暮れ）', '#e0703a', '#f8c070', '#6a4a4a'], BG14: ['荒れる海', '#1a2030', '#3a4a60', '#203050'], BG15: ['海の向こうのセリポス島', '#a0d0f8', '#f0f0e0', '#3a70a8'],
+  BG16: ['王宮の外観', '#8a90a0', '#c0c4cc', '#e0dcd0'], BG17: ['王宮の中庭', '#a0a8b8', '#d8d8d8', '#e8e4dc'], BG18: ['雷雲の空', '#101018', '#4a4a5a', '#2a2a30'], BG19: ['裂けた神話の頁', '#3a2a18', '#d8c090', '#c0a070'],
+};
+const ACTOR_PH = { hermes: ['ヘルメス', '#e8d070'], hades: ['ハデス', '#4a2a6a'], athena: ['アテナ', '#4a70c0'], poseidon: ['ポセイドン', '#3070b0'], zeus: ['ゼウス', '#f0e8c0'],
+  nymphBag: ['ニンフ（袋）', '#90d0a0'], nymphSickle: ['ニンフ（鎌）', '#90d0a0'], bagGlow: ['魔法の袋', '#c0c0d0'] };
+const phCache = {};
+function bgPic(key) {
+  if (MOVIMG[key]) return MOVIMG[key];
+  if (phCache[key]) return phCache[key];
+  const [name, top, mid, ground] = BG_PH[key] || [key, '#222', '#444', '#333'];
+  const c = document.createElement('canvas'); c.width = 384; c.height = 256; const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, 180); g.addColorStop(0, top); g.addColorStop(1, mid); x.fillStyle = g; x.fillRect(0, 0, 384, 256);
+  x.fillStyle = ground; x.fillRect(0, 172, 384, 84);
+  x.fillStyle = 'rgba(0,0,0,0.18)'; for (let i = 0; i < 384; i += 16) x.fillRect(i, 172 + (i / 16 % 2) * 6, 8, 2);
+  x.font = '12px "DotGothic16", sans-serif'; x.textAlign = 'center'; x.fillStyle = 'rgba(255,255,255,0.55)'; x.fillText('（仮）' + key + ' ' + name, 192, 40);
+  return (phCache[key] = c);
+}
+function actorPic(key) {
+  if (MOVIMG[key]) return { im: MOVIMG[key], s: 1 };
+  const g2 = (im) => im ? { im, s: im.width <= 64 ? 2 : 1 } : null;
+  const fb = { perseus: () => IMG.hero && IMG.hero.D[0], perseusBack: () => IMG.hero && IMG.hero.U[0], perseusGear: () => IMG.heroWin || (IMG.hero && IMG.hero.D[0]),
+    danae: () => OPIMG.danae, danaeJoy: () => OPIMG.danae, andromedaChain: () => OPIMG.andromeda, andromedaFree: () => OPIMG.andromeda2, kingOrder: () => OPIMG.kingSit, kingStone: () => OPIMG.kingAngry,
+    soldier: () => IMG.soldier && IMG.soldier.D[0], hoplite: () => IMG.hoplite && IMG.hoplite.D[0], cetus: () => OPIMG.cet0, cetusRoar: () => OPIMG.cetRoar, emblem: () => IMG.head }[key];
+  const r = fb && g2(fb());
+  if (r) { if (key === 'kingStone') r.stone = true; if (key === 'emblem') r.s = 3; return r; }
+  if (phCache['A' + key]) return { im: phCache['A' + key], s: 1 };
+  const [name, col] = ACTOR_PH[key] || [key, '#888'];
+  const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+  x.fillStyle = col; x.beginPath(); x.ellipse(64, 40, 18, 20, 0, 0, 7); x.fill(); x.fillRect(42, 58, 44, 62);
+  x.strokeStyle = '#03021f'; x.lineWidth = 2; x.strokeRect(42, 58, 44, 62);
+  x.font = '11px "DotGothic16", sans-serif'; x.textAlign = 'center'; x.fillStyle = '#fff'; x.fillText(name, 64, 94);
+  return { im: (phCache['A' + key] = c), s: 1 };
+}
 
 // ---- opening sound: looping ambience and one-shot effects, all synthesized ----
 let noiseBuf = null;
@@ -2238,136 +2294,119 @@ function drawFx(c2, fx, t, k, B, W, H, px) {
   }
 }
 
-function playOpening(ch, done) {
-  const data = OPENINGS[ch];
-  if (!data) { if (done) done(); return; }
-  progress.seenOp = progress.seenOp || {}; progress.seenOp[ch] = true; saveProgress(progress);
+// plays one or more movies in a row (ids from MOVIES), then calls done
+function playMovies(ids, done) {
+  const list = [];
+  ids.forEach(id => { const m = MOVIES[id]; if (!m) return; m.cuts.forEach(c => list.push({ ...c, amb: c.amb !== undefined ? c.amb : m.amb })); if (m.title) list.push({ titleCard: m.title }); });
+  if (!list.length) { if (done) done(); return; }
   const cv2 = $('opCv'), c2 = cv2.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  const W = Math.min(900, Math.round(window.innerWidth * dpr)), H = Math.min(1600, Math.round(window.innerHeight * dpr));
-  const px = Math.max(2, Math.round(Math.min(W, H) / 160));
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const W = Math.round(window.innerWidth * dpr), H = Math.round(window.innerHeight * dpr);
   cv2.width = W; cv2.height = H;
-  $('op').hidden = false; $('opHint').textContent = data.tapOnly ? 'タップで次へ' : 'タップで次へ（約10秒）';
-  const scenes = data.title ? data.scenes.concat([{ titleCard: data.title, dur: 1800 }]) : data.scenes;
-  opRun = { data, scenes, i: -1, t0: 0, done, fired: {} };
+  const px = Math.max(2, Math.round(H / 180));
+  $('op').hidden = false; $('opHint').textContent = 'タップで次へ';
+  opRun = { list, i: -1, line: 0, t0: 0, tl: 0, done, fired: {} };
+  const tx = $('opText');
+  const showLine = () => {
+    const sc = opRun.list[opRun.i], ln = sc.lines && sc.lines[opRun.line];
+    if (!ln) { tx.style.opacity = 0; return; }
+    const [who, text] = Array.isArray(ln) ? ln : ['', ln];
+    tx.innerHTML = (who ? '<span class="op-who">' + who + '</span>' : '') + text;
+    tx.classList.toggle('talk', !!who);
+    tx.style.opacity = 1; opRun.tl = performance.now();
+  };
   const next = () => {
     if (!opRun) return;
-    opRun.i++; opRun.fired = {};
-    if (opRun.i >= scenes.length) { endOpening(); return; }
+    const sc = opRun.list[opRun.i];
+    if (sc && sc.lines && opRun.line < sc.lines.length - 1) { opRun.line++; showLine(); return; }
+    opRun.i++; opRun.line = 0; opRun.fired = {};
+    if (opRun.i >= opRun.list.length) { endOpening(); return; }
     opRun.t0 = performance.now();
-    const sc = scenes[opRun.i], tx = $('opText');
+    const s2 = opRun.list[opRun.i];
     tx.style.opacity = 0;
-    if (sc.titleCard) { if (soundOn) OPSFX.titleHit(); return; }
-    setAmb(sc.amb || data.amb);
-    tx.classList.toggle('top', !!sc.textTop);
-    setTimeout(() => { if (!opRun) return; tx.textContent = sc.text || ''; tx.style.opacity = 1; }, 300);
+    if (s2.titleCard) { if (soundOn) OPSFX.titleHit(); return; }
+    setAmb(s2.amb);
+    setTimeout(() => { if (opRun && opRun.list[opRun.i] === s2) showLine(); }, 350);
   };
   opRun.next = next; next();
+  const DUR = 4200; // camera move length; the cut itself waits for a tap
   const frame = t => {
     if (!opRun) return;
-    const sc = opRun.scenes[opRun.i]; if (!sc) return;
-    const el = t - opRun.t0, k = Math.min(1, el / sc.dur), e = k * k * (3 - 2 * k);
+    const sc = opRun.list[opRun.i]; if (!sc) return;
+    const el = t - opRun.t0, k = Math.min(1, el / DUR), e = k * k * (3 - 2 * k);
     c2.setTransform(1, 0, 0, 1, 0, 0); c2.fillStyle = '#000'; c2.fillRect(0, 0, W, H);
-    if (sc.titleCard) { // chapter title: fades in, holds, fades out
-      const a = Math.min(1, el / 500); // stays until the player taps
-      c2.globalAlpha = Math.max(0, a); c2.textAlign = 'center'; c2.fillStyle = '#d9b75f';
-      c2.font = Math.round(H * 0.03) + 'px "DotGothic16", sans-serif'; c2.fillText(sc.titleCard[0], W / 2, H * 0.44);
-      c2.fillStyle = '#f7ecd2'; c2.font = Math.round(Math.min(W / 13, H * 0.045)) + 'px "DotGothic16", sans-serif'; c2.fillText(sc.titleCard[1], W / 2, H * 0.52);
-      c2.fillStyle = '#d9b75f'; const lw = W * 0.5 * Math.min(1, el / 700); c2.fillRect(W / 2 - lw / 2, H * 0.555, lw, Math.max(2, px / 2));
-      c2.globalAlpha = 1;
-      requestAnimationFrame(frame); return;
+    if (sc.titleCard) {
+      const a = Math.min(1, el / 500);
+      c2.globalAlpha = a; c2.textAlign = 'center'; c2.fillStyle = '#d9b75f';
+      c2.font = Math.round(H * 0.05) + 'px "DotGothic16", sans-serif'; c2.fillText(sc.titleCard[0], W / 2, H * 0.42);
+      c2.fillStyle = '#f7ecd2'; c2.font = Math.round(H * 0.085) + 'px "DotGothic16", sans-serif'; c2.fillText(sc.titleCard[1], W / 2, H * 0.56);
+      c2.fillStyle = '#d9b75f'; const lw = W * 0.4 * Math.min(1, el / 700); c2.fillRect(W / 2 - lw / 2, H * 0.6, lw, Math.max(2, px / 2));
+      c2.globalAlpha = 1; requestAnimationFrame(frame); return;
     }
-    // timed cues (sound, flash, shake)
     let shake = 0, flash = 0;
     (sc.cues || []).forEach((cu, ci) => {
-      if (k >= cu.at && !opRun.fired[ci]) { opRun.fired[ci] = el; if (cu.sfx && soundOn && OPSFX[cu.sfx]) OPSFX[cu.sfx](); }
+      if (k >= cu.at && opRun.fired[ci] === undefined) { opRun.fired[ci] = el; if (cu.sfx && soundOn && OPSFX[cu.sfx]) OPSFX[cu.sfx](); }
       if (opRun.fired[ci] !== undefined) {
         const since = el - opRun.fired[ci];
         if (cu.shake) shake = Math.max(shake, cu.shake * Math.max(0, 1 - since / 900));
         if (cu.flash) flash = Math.max(flash, cu.flash * Math.max(0, 1 - since / 350));
       }
     });
-    const cx = sc.from[0] + (sc.to[0] - sc.from[0]) * e, cy = sc.from[1] + (sc.to[1] - sc.from[1]) * e, z = sc.from[2] + (sc.to[2] - sc.from[2]) * e;
+    // camera: the background covers the screen; zoom and centre move from cam[0..2] to cam[3..5]
+    const bg = bgPic(sc.bg), cm = sc.cam || [0.5, 0.5, 1, 0.5, 0.5, 1];
+    const cx = cm[0] + (cm[3] - cm[0]) * e, cy = cm[1] + (cm[4] - cm[1]) * e, z = cm[2] + (cm[5] - cm[2]) * e;
+    const s = Math.max(W / bg.width, H / bg.height) * z, bw = bg.width * s, bh = bg.height * s;
     const sx = shake ? (Math.random() - 0.5) * px * 6 * shake : 0, sy = shake ? (Math.random() - 0.5) * px * 6 * shake : 0;
-    // a layer's rectangle on screen: far layers (low depth) move and zoom less than near ones, which gives depth
-    const rectOf = (im, depth, ly) => {
-      const zl = 1 + (z - 1) * (0.3 + 0.7 * depth), cxl = 0.5 + (cx - 0.5) * depth, cyl = 0.5 + (cy - 0.5) * depth;
-      const over = ly ? 1.06 : 1, base = Math.max(W / im.width, H / im.height) * zl * over, r = { bw: im.width * base, bh: im.height * base };
-      r.ox = Math.min(0, Math.max(W - r.bw, W / 2 - cxl * r.bw)) + sx * depth; r.oy = Math.min(0, Math.max(H - r.bh, H / 2 - cyl * r.bh)) + sy * depth;
-      if (ly) {
-        if (ly.drift) r.ox += Math.sin(t / 4000) * ly.drift * px;
-        if (ly.sway) r.ox += Math.sin(t / 900) * ly.sway * px;
-        if (ly.bob) r.oy += Math.sin(t / 700 + depth * 3) * ly.bob * px;
-        if (ly.dy) r.oy += ly.dy * r.bh;
-      }
-      r.dot = r.bh / im.height; return r;
-    };
-    let B = { ox: 0, oy: 0, bw: W, bh: H, dot: 4 };
-    const rects = [];
-    const drawSprites = li => { for (const sp of sc.sprites || []) if ((sp.layer === undefined ? (sc.layers ? sc.layers.length - 1 : -1) : sp.layer) === li) drawSprite(sp); };
-    const drawSprite = sp => {
-      const R = sc.layers ? rects[rects.length - 1] : B;
-      let im, ax, ay;
-      if (sp.hero && !sp.walk) { // Perseus standing still, facing sp.pose
-        const set = IMG.hero && IMG.hero[sp.pose || 'D']; im = set ? set[0] : null;
-        ax = R.ox + sp.bx * R.bw; ay = R.oy + sp.by * R.bh;
-      } else if (sp.hero) { // Perseus walks in, then turns to face the sea
-        const wk = sp.walk, wp = Math.min(1, k / wk.until), walking = wp < 1;
-        ax = R.ox + (wk.from[0] + (wk.to[0] - wk.from[0]) * wp) * R.bw; ay = R.oy + (wk.from[1] + (wk.to[1] - wk.from[1]) * wp) * R.bh;
-        const set = IMG.hero && (walking ? IMG.hero.R : IMG.hero.U);
-        im = set ? set[walking ? 1 + Math.floor(t / 160) % 2 : 0] : null;
-        if (walking) ay -= Math.abs(Math.sin(t / 160 * Math.PI)) * px;
-      } else {
-        const fr = sp.after && k >= sp.after.at ? sp.after.frames : sp.frames || [sp.img];
-        im = OPIMG[fr[Math.floor(t / 1000 * (sp.fps || 2)) % fr.length]];
-        ax = sp.bx !== undefined ? R.ox + sp.bx * R.bw : W * sp.x; ay = sp.by !== undefined ? R.oy + sp.by * R.bh : H * sp.y;
-      }
-      if (!im) return;
-      // layered scenes: the sprite's dots match the background's dots; single pictures: size as a share of the screen
-      const baseW = sp.hero ? 32 : im.width; // the hero art is now 64px with finer dots: keep the size it had in the 32px days
-      const size = (sc.layers ? Math.max(1, Math.round(R.dot * (sp.k || 1))) : Math.max(1, Math.round(Math.min(W, H) * sp.size / baseW))) * baseW;
-      let x = ax - size / 2, y = ay - size / 2;
-      if (sp.fx === 'rise') y += (1 - Math.min(1, k / 0.55)) * H * 0.3;
-      if (sp.fx === 'rise' && !(sp.after && k >= sp.after.at)) y += Math.sin(t / 260) * px;
-      c2.drawImage(im, Math.round(x), Math.round(y), size, size);
-    };
+    const ox = Math.min(0, Math.max(W - bw, W / 2 - cx * bw)) + sx, oy = Math.min(0, Math.max(H - bh, H / 2 - cy * bh)) + sy;
+    const B = { ox, oy, bw, bh, dot: s };
     c2.imageSmoothingEnabled = false;
-    if (sc.layers) {
-      sc.layers.forEach((ly, li) => {
-        const im = OPIMG[ly.img]; if (!im) return;
-        const r = rectOf(im, ly.depth, ly); rects[li] = r;
-        c2.drawImage(im, Math.round(r.ox), Math.round(r.oy), Math.round(r.bw), Math.round(r.bh));
-        drawSprites(li);
-      });
-      B = rects[rects.length - 1] || B;
-    } else {
-      const bg = OPIMG[sc.bg];
-      if (bg) { B = rectOf(bg, 1, null); c2.imageSmoothingEnabled = true; c2.drawImage(bg, B.ox, B.oy, B.bw, B.bh); c2.imageSmoothingEnabled = false; }
-    }
+    c2.drawImage(bg, Math.round(ox), Math.round(oy), Math.round(bw), Math.round(bh));
     const fxs = sc.fx || [];
-    const fxRect = f => (f.layer !== undefined && rects[f.layer]) || B;
-    fxs.filter(f => f.type === 'clouds').forEach(f => drawFx(c2, f, t, k, fxRect(f), W, H, px));
-    if (!sc.layers) for (const sp of sc.sprites || []) drawSprite(sp);
-    fxs.filter(f => f.type !== 'clouds').forEach(f => drawFx(c2, f, t, k, fxRect(f), W, H, px));
+    fxs.filter(f => f.type === 'clouds').forEach(f => drawFx(c2, f, t, k, B, W, H, px));
+    // actors: their dots match the background's dots; they fade in one after another
+    (sc.actors || []).forEach((a, ai) => {
+      const ap = actorPic(a.k === 'cetus' && a.roarAt !== undefined && k >= a.roarAt ? 'cetusRoar' : a.k); if (!ap || !ap.im) return;
+      const size = ap.im.width * ap.s * s * (a.far ? 0.5 : 1);
+      const fx0 = ox + a.x * bw, feet = oy + (a.y || 0.86) * bh;
+      let y = feet - size + 4 * ap.s * s * (a.far ? 0.5 : 1);
+      if (a.rise) y += (1 - Math.min(1, k / 0.55)) * H * 0.35 + Math.sin(t / 260) * px;
+      const al = Math.min(1, Math.max(0, (el - 250 - ai * 180) / 400));
+      if (al <= 0) return;
+      c2.save(); c2.globalAlpha = al;
+      if (ap.stone) c2.filter = 'grayscale(1) brightness(1.1)';
+      if (a.flip) { c2.translate(Math.round(fx0), 0); c2.scale(-1, 1); c2.drawImage(ap.im, Math.round(-size / 2), Math.round(y), Math.round(size), Math.round(size)); }
+      else c2.drawImage(ap.im, Math.round(fx0 - size / 2), Math.round(y), Math.round(size), Math.round(size));
+      c2.restore();
+    });
+    fxs.filter(f => f.type !== 'clouds' && f.type !== 'tear').forEach(f => drawFx(c2, f, t, k, B, W, H, px));
     if (sc.tint) { c2.fillStyle = sc.tint; c2.fillRect(0, 0, W, H); }
+    const tear = fxs.find(f => f.type === 'tear');
+    if (tear && k >= tear.from) { // a zigzag crack of light splits the page from top to bottom
+      const p = Math.min(1, (k - tear.from) / 0.4), gap = p * px * 10, pts = [];
+      for (let i = 0; i <= 12; i++) pts.push([W / 2 + (i % 2 ? 1 : -1) * W * 0.03 * hash(i * 7 + 1), H * i / 12 * p]);
+      c2.fillStyle = '#000'; c2.beginPath(); pts.forEach(([x, y], i) => (i ? c2.lineTo(x - gap, y) : c2.moveTo(x - gap, y))); for (let i = pts.length - 1; i >= 0; i--) c2.lineTo(pts[i][0] + gap, pts[i][1]); c2.fill();
+      c2.save(); c2.globalCompositeOperation = 'lighter'; c2.strokeStyle = 'rgba(255,215,110,0.9)'; c2.lineWidth = px * (1 + Math.sin(t / 60)); c2.beginPath(); pts.forEach(([x, y], i) => (i ? c2.lineTo(x, y) : c2.moveTo(x, y))); c2.stroke(); c2.restore();
+    }
     if (flash) { c2.fillStyle = 'rgba(235,240,255,' + flash + ')'; c2.fillRect(0, 0, W, H); }
-    const g = sc.textTop ? c2.createLinearGradient(0, H * 0.3, 0, 0) : c2.createLinearGradient(0, H * 0.55, 0, H); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.7)');
+    const g = c2.createLinearGradient(0, H * 0.62, 0, H); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.65)');
     c2.fillStyle = g; c2.fillRect(0, 0, W, H);
-    // fade in from black at the start of each scene; fade out before an automatic cut
-    let dark = Math.max(0, 1 - el / 450);
-    if (!opRun.data.tapOnly) dark = Math.max(dark, (el - (sc.dur - 350)) / 350);
-    if (dark > 0) { c2.fillStyle = 'rgba(0,0,0,' + Math.min(1, dark) + ')'; c2.fillRect(0, 0, W, H); }
-    if (!opRun.data.tapOnly && k >= 1) next();
+    const dark = Math.max(0, 1 - el / 450);
+    if (dark > 0) { c2.fillStyle = 'rgba(0,0,0,' + dark + ')'; c2.fillRect(0, 0, W, H); }
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
 }
-function endOpening() { const d = opRun && opRun.done; opRun = null; setAmb(null); $('op').hidden = true; if (d) d(); }
+function playOpening(ch, done) {
+  progress.seenOp = progress.seenOp || {}; progress.seenOp[ch] = true; saveProgress(progress);
+  playMovies(CHAPTER_MOVIES[ch] || [], done);
+}
+function endOpening() { const d = opRun && opRun.done; opRun = null; setAmb(null); $('op').hidden = true; $('opText').style.opacity = 0; if (d) d(); }
 $('op').addEventListener('click', e => {
   if (e.target.id === 'opSkip') { endOpening(); return; }
   if (!opRun) return;
-  const sc = opRun.scenes[opRun.i];
-  if (sc && sc.titleCard && performance.now() - opRun.t0 < 600) return; // don't skip the chapter title by a double tap
+  const sc = opRun.list[opRun.i];
+  if (performance.now() - Math.max(opRun.t0, opRun.tl) < 350) return; // a double tap does not skip a line
+  if (sc && sc.titleCard && performance.now() - opRun.t0 < 700) return;
   opRun.next();
 });
 
@@ -2432,7 +2471,7 @@ function openCard(mode) {
     html += '<div class="eyebrow">STAGES</div><h2>ステージを選ぶ</h2>';
     let curCh = 0;
     LEVELS.forEach((l, i) => {
-      if (chapterOf(i) !== curCh) { html += (curCh ? '</div>' : '') + '<p class="chap">第' + chapterOf(i) + '章　' + CHAPTER_NAME[chapterOf(i)] + (OPENINGS[chapterOf(i)] && (progress.seenOp || {})[chapterOf(i)] ? '<button class="opbtn" data-op="' + chapterOf(i) + '">▶ オープニング</button>' : '') + '</p><div class="grid-stages">'; curCh = chapterOf(i); }
+      if (chapterOf(i) !== curCh) { html += (curCh ? '</div>' : '') + '<p class="chap">第' + chapterOf(i) + '章　' + CHAPTER_NAME[chapterOf(i)] + (OPENINGS[chapterOf(i)] && (progress.seenOp || {})[chapterOf(i)] ? '<button class="opbtn" data-op="' + chapterOf(i) + '">▶ オープニング</button>' : '') + ((progress.seenEnd || {})[CHAPTER_END_MOVIE[chapterOf(i)]] ? '<button class="opbtn" data-end="' + CHAPTER_END_MOVIE[chapterOf(i)] + '">▶ 章の終わり</button>' : '') + '</p><div class="grid-stages">'; curCh = chapterOf(i); }
       const locked = i > progress.unlocked;
       const b = progress.best[LEVELS[i].id];
       html += '<button data-s="' + i + '" class="' + (i === stageIdx ? 'cur ' : '') + (l.boss ? 'boss' : '') + '"' + (locked ? ' disabled' : '') + '><small>' + stageLabel(i) + '</small>' + (locked ? '？？？' : l.name) + (b ? '<span class="best">' + starStr(starsAt(i)) + ' ' + fmtRec(b) + '</span>' : '') + '</button>';
@@ -2480,6 +2519,7 @@ function closeCard() { cardMode = null; $('veil').hidden = true; }
 $('card').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.s !== undefined) { closeCard(); startStage(Number(b.dataset.s)); return; }
+  if (b.dataset.end !== undefined) { closeCard(); playMovies([b.dataset.end], () => openCard('menu')); return; }
   if (b.dataset.op !== undefined) { const oc = Number(b.dataset.op); closeCard(); playOpening(oc, () => startStage(LEVELS.findIndex((L, k) => chapterOf(k) === oc))); return; }
   const c = b.dataset.c;
   if (c === 'go' || c === 'close') closeCard();
@@ -3779,7 +3819,7 @@ function loadArt() {
       const P = sh.v_people;
       IMG.hero = { D: [0, 1, 2].map(i => g(P, i, 4)), U: [4, 5, 6].map(i => g(P, i, 4)), R: [8, 9, 10].map(i => g(P, i, 4)), L: [8, 9, 10].map(i => g(P, i, 4, 64, true)) };
       IMG.heroJump = g(P, 3, 4); IMG.heroWin = g(P, 7, 4); IMG.heroLose = g(P, 11, 4);
-      OPIMG.andromeda = g(P, 12, 4); OPIMG.andromeda2 = g(P, 13, 4);
+      OPIMG.andromeda = g(P, 12, 4); OPIMG.andromeda2 = g(P, 13, 4); OPIMG.danae = g(P, 14, 4);
       const A = sh.v_enemiesA, B = sh.v_enemiesB, G = sh.v_gorgon, I = sh.v_items, K = sh.v_bosses;
       IMG.spartoi = two(A, 0); IMG.spartoiSleep = g(A, 6, 4); IMG.spartoiBroken = g(A, 7, 4);
       IMG.hoplite = two(A, 8); IMG.hopliteSleep = g(A, 14, 4); IMG.hopliteBlock = g(A, 15, 4);
@@ -3795,6 +3835,9 @@ function loadArt() {
       V64 = { tiles: { 1: tilesOf(sh.v_ch1_tiles), 2: tilesOf(sh.v_ch2_tiles), 3: tilesOf(sh.v_ch3_tiles) },
         door: g(I, 8, 4), doorOpen: g(I, 9, 4), vine: g(I, 10, 4), gate: g(I, 11, 4), exitSealed: g(I, 12, 4), exitOpen: g(I, 13, 4), pitRim: g(I, 14, 4), pitCenter: g(I, 15, 4) };
     }
+    const MOV_KEYS = { v_mov_people1: ['perseus', 'perseusBack', 'perseusGear', 'danae', 'danaeJoy', 'andromedaChain'], v_mov_people2: ['kingOrder', 'kingStone', 'andromedaFree', 'nymphBag', 'nymphSickle', 'bagGlow'], v_mov_people3: ['hermes', 'hades', 'athena', 'poseidon', 'zeus'] };
+    for (const sk in MOV_KEYS) if (sh[sk]) MOV_KEYS[sk].forEach((key, i) => { const c = document.createElement('canvas'); c.width = c.height = 128; c.getContext('2d').drawImage(sh[sk], (i % 3) * 128, Math.floor(i / 3) * 128, 128, 128, 0, 0, 128, 128); MOVIMG[key] = c; });
+    for (const k in sh) if (/^v_bg\d\d$/.test(k)) MOVIMG['BG' + k.slice(4)] = sh[k];
     URL_OF.spartoi = IMG.spartoi.D[0].toDataURL();
   });
 }

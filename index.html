@@ -363,6 +363,7 @@ function parseLevel(lv) {
   const mobs = [];
   let player = null, medusa = null, boss = null, id = 0;
   const statues = [];
+  const dirs = (lv.dirs || '').split(''); let di = 0; // facing of each patrol / sentry, in reading order
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const c = rows[y][x];
@@ -379,6 +380,9 @@ function parseLevel(lv) {
       else if (c === 'C') { boss = { kind: 'cetus', x, y, hx: x, hy: y, hp: CETUS_HP, str: 0, rest: 0, alive: true, aim: '', wave: 0, cool: 0, rage: 0 }; grid.push('~'); }
       // king Polydectes: 'Q' is the top-left of his 2x2 throne. hp = soldiers he can still call, rest = turns until the next call
       else if (c === 'Q') { boss = { kind: 'king', x, y, hp: lv.reserve || 0, str: 0, rest: SUMMON_EVERY, alive: true }; grid.push('.'); }
+      // 第2版ルールの敵：巡回の番兵（往復）と見張りの番兵（その場で見張り、気づくと突進）
+      else if (c === 'f') { mobs.push({ id: id++, x, y, kind: 'patrol', awake: true, stun: 0, fresh: false, d: dirs[di++] || 'R' }); grid.push('.'); }
+      else if (c === 'r') { mobs.push({ id: id++, x, y, kind: 'sentry', awake: true, stun: 0, fresh: false, d: dirs[di++] || 'D', alert: false }); grid.push('.'); }
       else if (c === 'k') { mobs.push({ id: id++, x, y, kind: 'soldier', awake: true, stun: 0, fresh: false }); grid.push('.'); }
       // a boulder: pushed like a statue
       else if (c === 'B') { statues.push({ x, y, kind: 'rock', dir: 'D', under: '.' }); grid.push('T'); }
@@ -390,7 +394,7 @@ function parseLevel(lv) {
     inv: { helm: 0, harpe: 0, sandal: 0, shield: 0, head: 0, trident: 0 },
     sea: lv.sea ? (lv.sea === 'high' ? 1 : 0) : -1, statues,
     keys: 0, mobs, medusa, boss, invis: 0, shieldT: 0, armed: false,
-    turn: 0, status: 'play', cause: '', msg: '', events: []
+    turn: 0, status: 'play', cause: '', msg: '', events: [], v2: !!lv.v2, guard: false
   };
 }
 
@@ -402,19 +406,21 @@ function clone(s) {
     keys: s.keys, mobs: s.mobs.map(m => Object.assign({}, m)),
     medusa: s.medusa ? { x: s.medusa.x, y: s.medusa.y, alive: s.medusa.alive } : null,
     boss: s.boss ? Object.assign({}, s.boss) : null,
-    invis: s.invis, shieldT: s.shieldT, armed: s.armed, turn: s.turn, status: s.status, cause: s.cause, msg: s.msg, events: []
+    invis: s.invis, shieldT: s.shieldT, armed: s.armed, turn: s.turn, status: s.status, cause: s.cause, msg: s.msg, events: [], v2: s.v2, guard: s.guard
   };
 }
 // compact identity of a position (for searching); ignores turn count and messages
 function stateKey(s) {
-  let k = s.player.x + ',' + s.player.y + s.player.dir + s.hearts + '|' + s.inv.helm + s.inv.harpe + s.inv.sandal + s.inv.shield + s.inv.head + s.inv.trident + s.keys + '|' + s.sea + '|' + s.invis + ',' + s.shieldT + (s.armed ? 'a' : '') + (s.medusa && s.medusa.alive ? 'G' : '') + '|';
-  for (const m of s.mobs) k += m.id + ':' + m.x + ',' + m.y + (m.awake ? 'w' : '') + m.stun + (m.fresh ? 'f' : '') + (m.f || '') + ';';
+  let k = s.player.x + ',' + s.player.y + s.player.dir + s.hearts + '|' + s.inv.helm + s.inv.harpe + s.inv.sandal + s.inv.shield + s.inv.head + s.inv.trident + s.keys + '|' + s.sea + '|' + s.invis + ',' + s.shieldT + (s.armed ? 'a' : '') + (s.guard ? 'g' : '') + (s.medusa && s.medusa.alive ? 'G' : '') + '|';
+  for (const m of s.mobs) k += m.id + ':' + m.x + ',' + m.y + (m.awake ? 'w' : '') + m.stun + (m.fresh ? 'f' : '') + (m.f || '') + (m.d || '') + (m.alert ? '!' : '') + ';';
   if (s.boss) k += 'B' + (s.boss.alive ? s.boss.x + ',' + s.boss.y + s.boss.hp + s.boss.str + s.boss.rest + (s.boss.aim || '') + (s.boss.wave || 0) + (s.boss.cool || 0) : 'x');
   return k + '|' + s.grid.join('');
 }
 function tile(s, x, y) { return (x < 0 || y < 0 || x >= s.w || y >= s.h) ? '#' : s.grid[y * s.w + x]; }
 function setTile(s, x, y, c) { s.grid[y * s.w + x] = c; }
-function isSolid(c) { return c === '#' || c === 'I' || c === 'T'; }
+// メドゥーサの像（^ > v <）は動かない壁で、矢印の向きへ視線を出し続ける
+const GAZE_DIR = { '^': 'U', '>': 'R', 'v': 'D', '<': 'L' };
+function isSolid(c) { return c === '#' || c === 'I' || c === 'T' || !!GAZE_DIR[c]; }
 // the sea: shallows (w) are dry at low tide and under water at high tide. Poseidon's trident switches it.
 function tideHigh(s) { return s.sea === 1; }
 function mobAt(s, x, y) { return s.mobs.findIndex(m => m.x === x && m.y === y); }
@@ -551,6 +557,7 @@ function faceToward(x, y, tx, ty) { const dx = tx - x, dy = ty - y; return Math.
 // ホプリタイの盾が自分の方を向いているか（正面から斬ろうとしている）
 function shieldFacing(m, x, y) { return m.kind === 'hoplite' && m.x + DIRS[m.f][0] === x && m.y + DIRS[m.f][1] === y; }
 function enemyPhase(s) {
+  if (s.v2) { v2Phase(s); return; }
   if (s.invis > 0) {
     s.invis--;
   } else {
@@ -748,6 +755,115 @@ function hitBoss(s) {
   } else { s.msg = 'ケートスに命中！ あと' + b.hp + '回'; if (b.kind === 'cetus') b.rage = 1; }
 }
 
+// ===== 第2版ルール（像・巡回・見張り・構える盾） =====
+// 像の視線が届くマス。壁・柱・岩・石像・ツタ・扉で止まる。奈落と海は越える。敵に当たるとそこで止まる（その敵は石になる）
+function statueGaze(s) {
+  const out = [];
+  for (let i = 0; i < s.grid.length; i++) {
+    const d = GAZE_DIR[s.grid[i]]; if (!d) continue;
+    const [dx, dy] = DIRS[d];
+    let x = i % s.w + dx, y = ((i / s.w) | 0) + dy;
+    while (true) {
+      const c = tile(s, x, y);
+      if (isSolid(c) || c === 'V' || c === 'D') break;
+      out.push([x, y]);
+      if (mobAt(s, x, y) >= 0) break;
+      x += dx; y += dy;
+    }
+  }
+  return out;
+}
+function inStatueGaze(s, x, y) { return statueGaze(s).some(([a, b]) => a === x && b === y); }
+function petrify(s, m) {
+  const i = s.mobs.indexOf(m); if (i < 0) return;
+  s.mobs.splice(i, 1);
+  s.statues.push({ x: m.x, y: m.y, kind: m.kind, dir: m.d || 'D', under: tile(s, m.x, m.y) });
+  setTile(s, m.x, m.y, 'T');
+  s.events.push({ t: 'stone', x: m.x, y: m.y, id: m.id });
+  s.msg = (m.kind === 'sentry' ? '見張り' : '番兵') + 'が像の視線を浴びて石になった';
+}
+// 視線の中にいる敵は石になる（石が新しい影を作るので、変化がなくなるまで繰り返す）
+function petrifyAll(s) {
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const [x, y] of statueGaze(s)) {
+      const i = mobAt(s, x, y);
+      if (i >= 0 && s.mobs[i].kind !== 'nereid') { petrify(s, s.mobs[i]); changed = true; break; }
+    }
+  }
+}
+// ダメージ。鏡の盾を構えていれば、種類を問わず1回だけ防ぐ
+function hurt(s, msg, x, y) {
+  if (s.guard) { s.guard = false; s.events.push({ t: 'block' }); s.msg = '鏡の盾が防いだ！（盾は砕けた）'; return; }
+  s.hearts = Math.max(0, s.hearts - 1);
+  s.events.push({ t: 'hit', x, y });
+  s.msg = msg;
+}
+function rev(d) { return { U: 'D', D: 'U', L: 'R', R: 'L' }[d]; }
+// 番兵が歩けるマス（ペルセウスのいるマスは別に扱う）
+function guardOK(s, x, y) {
+  const c = tile(s, x, y);
+  if (!('.KHSWMNY'.includes(c) || (c === 'w' && !tideHigh(s)))) return false;
+  return mobAt(s, x, y) < 0;
+}
+// 巡回の番兵：向いている方へ1歩。ふさがっていれば向きを変えて1歩。ペルセウスにぶつかるとハート−1で折り返す
+function patrolStep(s, m) {
+  for (let k = 0; k < 2; k++) {
+    const nx = m.x + DIRS[m.d][0], ny = m.y + DIRS[m.d][1];
+    if (nx === s.player.x && ny === s.player.y) { hurt(s, '巡回の番兵にぶつかった！', m.x, m.y); m.d = rev(m.d); return; }
+    if (guardOK(s, nx, ny)) { m.x = nx; m.y = ny; return; }
+    m.d = rev(m.d);
+  }
+}
+// 見張りの番兵が向いている列にペルセウスがいるか（奈落と海は見通す）
+function sentrySees(s, m) {
+  const [dx, dy] = DIRS[m.d];
+  let x = m.x + dx, y = m.y + dy;
+  while (true) {
+    if (x === s.player.x && y === s.player.y) return true;
+    const c = tile(s, x, y);
+    if (isSolid(c) || c === 'V' || c === 'D' || mobAt(s, x, y) >= 0) return false;
+    x += dx; y += dy;
+  }
+}
+// 見張り：列に入られると気づき（!）、次のターンに一直線に突進する。奈落や海に入れば落ちる。視線に入れば石になる
+function sentryStep(s, m) {
+  if (!m.alert) {
+    if (sentrySees(s, m)) { m.alert = true; s.events.push({ t: 'alert', x: m.x, y: m.y }); s.msg = s.msg || '見張りに気づかれた！ 次のターン、一直線に突進してくる'; }
+    return;
+  }
+  m.alert = false;
+  const [dx, dy] = DIRS[m.d];
+  while (true) {
+    const nx = m.x + dx, ny = m.y + dy, c = tile(s, nx, ny);
+    if (nx === s.player.x && ny === s.player.y) { hurt(s, '見張りの突進を受けた！', m.x, m.y); return; }
+    if (c === 'O' || c === '~' || (c === 'w' && tideHigh(s))) {
+      s.mobs.splice(s.mobs.indexOf(m), 1);
+      s.events.push({ t: 'fall', x: nx, y: ny, from: [m.x, m.y] });
+      s.msg = c === 'O' ? '見張りは勢いあまって奈落へ落ちた' : '見張りは勢いあまって海へ落ちた';
+      return;
+    }
+    if (!guardOK(s, nx, ny)) return;
+    m.x = nx; m.y = ny;
+    if (inStatueGaze(s, m.x, m.y)) { petrify(s, m); return; }
+  }
+}
+function v2Phase(s) {
+  petrifyAll(s);
+  if (s.invis > 0) s.invis--;
+  else for (const m of s.mobs.slice()) {
+    if (!s.mobs.includes(m)) continue;
+    if (m.fresh) { m.fresh = false; continue; }
+    if (m.stun > 0) { m.stun--; continue; }
+    if (m.kind === 'patrol') patrolStep(s, m);
+    else if (m.kind === 'sentry') sentryStep(s, m);
+    petrifyAll(s);
+  }
+  const p = s.player;
+  if (inStatueGaze(s, p.x, p.y)) hurt(s, 'メドゥーサの像の視線を浴びた！');
+  if (s.hearts <= 0) { s.status = 'lose'; s.cause = 'hearts'; s.msg = 'ハートが尽きた…'; s.events.push({ t: 'dead' }); }
+}
+
 function endTurn(s) {
   if (s.boss && s.boss.rage) rampage(s);
   enemyPhase(s); s.turn++;
@@ -839,6 +955,8 @@ function act(s0, a) {
       if (tile(s, nx, ny) === 'T') {
         const rock = (s.statues.find(o => o.x === nx && o.y === ny) || {}).kind === 'rock';
         if (!pushStatue(s, nx, ny, dx, dy)) { s.msg = bossAt(s, nx + dx, ny + dy) ? '暴れるケートスには当たらない。座礁させよう' : rock ? '岩はこれ以上押せない' : '石像はこれ以上押せない'; return s; }
+        // 第2版ルール：押した岩や石像だけが1マス動き、ペルセウスはその場に残る（神トラ式）
+        if (s.v2) { endTurn(s); return s; }
       }
       if (!playerCanEnter(s, nx, ny)) {
         const c = tile(s, nx, ny);
@@ -879,6 +997,13 @@ function act(s0, a) {
     endTurn(s); return s;
   }
 
+  if (a === 'shield' && s.v2) {
+    if (s.guard) { s.msg = '鏡の盾はもう構えている'; return s; }
+    if (s.inv.shield <= 0) { s.msg = '鏡の盾を持っていない'; return s; }
+    s.inv.shield--; s.guard = true;
+    s.msg = '鏡の盾を構えた。次の攻撃を1回だけ防ぐ'; s.events.push({ t: 'shield' });
+    endTurn(s); return s;
+  }
   if (a === 'shield') {
     if (s.inv.shield <= 0) { s.msg = '鏡の盾を持っていない'; return s; }
     s.inv.shield--; s.shieldT = SHIELD_TURNS;
@@ -964,7 +1089,7 @@ function act(s0, a) {
         const kind = s.mobs[mi].kind;
         s.mobs.splice(mi, 1);
         s.inv.harpe--; p.dir = d;
-        s.msg = kind === 'soldier' ? '兵士を打ち払った' : kind === 'hoplite' ? 'ホプリタイを打ち払った' : kind === 'nereid' ? 'ネレイスは海へ逃げていった' : 'スパルトイを打ち砕いた'; s.events.push({ t: 'kill', x, y, kind });
+        s.msg = kind === 'soldier' ? '兵士を打ち払った' : kind === 'hoplite' ? 'ホプリタイを打ち払った' : kind === 'nereid' ? 'ネレイスは海へ逃げていった' : kind === 'patrol' || kind === 'sentry' ? '番兵を打ち払った' : 'スパルトイを打ち砕いた'; s.events.push({ t: 'kill', x, y, kind });
         endTurn(s); return s;
       }
       if (tile(s, x, y) === 'V') {
@@ -999,7 +1124,7 @@ function replay(lv, code) {
   return { ok: s.status === 'win', turns: s.turn, hearts: s.hearts };
 }
 
-if (typeof module !== 'undefined') module.exports = { shieldFacing, splashTiles, waveSafe, stranded, walkDist, parseLevel, act, gazeTiles, tile, exitOpen, ITEM_NAME, encodeMoves, replay, stateKey, tideHigh, bossAt };
+if (typeof module !== 'undefined') module.exports = { statueGaze, inStatueGaze, sentrySees, GAZE_DIR, shieldFacing, splashTiles, waveSafe, stranded, walkDist, parseLevel, act, gazeTiles, tile, exitOpen, ITEM_NAME, encodeMoves, replay, stateKey, tideHigh, bossAt };
 
 </script>
 <script>
@@ -1552,6 +1677,255 @@ const LEVELS = [
 ];
 if (typeof module !== 'undefined') module.exports = { LEVELS };
 
+// 1章候補（試作）— 第2版ルール（v2）。遊び比べて10面を選ぶための試作。tools/solve2.js で確認する。
+LEVELS.push(
+  {
+    id: 'c1x.a', label: '1-a', chapter: 9, theme: 1, v2: true, free: true,
+    par: 12,
+    name: '柱の影を歩く',
+    hint: '像の赤い視線を浴びるとハート−1。視線は柱で止まる。',
+    need: [], alt: 'shield',
+    map: [
+      '#######',
+      '#P.M..#',
+      '#.###.#',
+      '>...I.#',
+      '#.###.#',
+      '#E....#',
+      '#######',
+    ],
+  },
+  {
+    id: 'c1x.b', label: '1-b', chapter: 9, theme: 1, v2: true, free: true,
+    par: 6,
+    name: '岩で日陰を作る',
+    hint: '岩も視線をさえぎる。押しても自分はその場に残る。',
+    need: ['push'], alt: 'shield',
+    map: [
+      '########',
+      '#M.P...#',
+      '#..B..##',
+      '>.....E#',
+      '########',
+    ],
+  },
+  {
+    id: 'c1x.c', label: '1-c', chapter: 9, theme: 1, v2: true, free: true,
+    par: 14,
+    name: '石像は押せる',
+    hint: '視線を浴びた敵は石像になる。石像は岩と同じように押せる。',
+    need: ['sink'], alt: 'sandal', dirs: 'L',
+    map: [
+      '####v####',
+      '###E....#',
+      '#..O...f#',
+      '#W..#...#',
+      '#P......#',
+      '#########',
+    ],
+  },
+  {
+    id: 'c1x.d', label: '1-d', chapter: 9, theme: 1, v2: true, free: true,
+    par: 9,
+    name: '突進を視線で止める',
+    hint: '見張りは、向いている列に入ると気づき（！）、次のターンに一直線に突進してくる。',
+    need: ['stone'], alt: 'shield', dirs: 'R',
+    map: [
+      '####v####',
+      '#r......#',
+      '##.#.####',
+      '#P.M..E.#',
+      '#########',
+    ],
+  },
+  {
+    id: 'c1x.e', label: '1-e', chapter: 9, theme: 1, v2: true, free: true,
+    par: 13,
+    name: '切らないツタ',
+    hint: 'ハルペーの鎌はツタを1つだけ断てる。ツタも視線をさえぎっている。',
+    need: ['cut'], itemReq: ['harpe'],
+    map: [
+      '##########',
+      '#P.S.....#',
+      '#.######.#',
+      '>V...E..V#',
+      '##########',
+    ],
+  },
+  {
+    id: 'c1x.f', label: '1-f', chapter: 9, theme: 1, v2: true, free: true,
+    par: 19,
+    name: '切ると石になる',
+    hint: '鎌は一度きり。何を斬れば、橋の材料が手に入る？',
+    need: ['sink'], alt: 'sandal', itemReq: ['harpe'], dirs: 'D',
+    map: [
+      '#########',
+      '#.SP.f.W#',
+      '>V....#.#',
+      '#####O..#',
+      '#E....#.#',
+      '#########',
+    ],
+  },
+  {
+    id: 'c1x.g', label: '1-g', chapter: 9, theme: 1, v2: true, free: true,
+    par: 10,
+    name: '折り返しを作る',
+    hint: '巡回の番兵は、ふさがれると折り返す。折り返す場所が変われば、歩く道も変わる。',
+    need: ['stone'], alt: 'shield', dirs: 'R',
+    map: [
+      '######v##',
+      '#####..##',
+      '#..f.B.##',
+      '#####..##',
+      '#P.M...E#',
+      '#########',
+    ],
+  },
+  {
+    id: 'c1x.h', label: '1-h', chapter: 9, theme: 1, v2: true, free: true,
+    par: 30,
+    name: '先頭の石が影を作る',
+    hint: '石像も視線をさえぎる。橋の材料は2つ要る。',
+    need: ['sink'], dirs: 'LL',
+    map: [
+      '####v####',
+      '#E.O.f..#',
+      '###.O##.#',
+      '###O...f#',
+      '###.#...#',
+      '#P......#',
+      '#########',
+    ],
+  },
+  {
+    id: 'c1x.i', label: '1-i', chapter: 9, theme: 1, v2: true, free: true,
+    par: 17,
+    name: '構えるのはまだ早い',
+    hint: '鏡の盾は、構えたあと最初に受ける攻撃を1回だけ防いで砕ける。',
+    itemReq: ['shield'],
+    map: [
+      '#########',
+      '#P.M....#',
+      '>.#####.#',
+      '#.......#',
+      '>.......#',
+      '#E......#',
+      '#########',
+    ],
+  },
+  {
+    id: 'c1x.j', label: '1-j', chapter: 9, theme: 1, v2: true, free: true,
+    par: 20,
+    name: '兜は視線を止めない',
+    hint: 'ハデスの兜をかぶると、しばらく敵が動かない。ただし像の視線は止まらない。',
+    alt: 'helm', dirs: 'L',
+    map: [
+      '####v#####',
+      '#P.B.#####',
+      '#H##.#####',
+      '#.......r#',
+      '#######E##',
+      '##########',
+    ],
+  },
+  {
+    id: 'c1x.k', label: '1-k', chapter: 9, theme: 1, v2: true, free: true,
+    par: 15,
+    name: '鍵は視線の中',
+    hint: '鍵を拾うには、そのマスに立たなければならない。',
+    need: ['push'],
+    map: [
+      '#########',
+      '#P......#',
+      '##B##.###',
+      '>..K....#',
+      '#######D#',
+      '#######E#',
+      '#########',
+    ],
+  },
+  {
+    id: 'c1x.l', label: '1-l', chapter: 9, theme: 1, v2: true, free: true,
+    par: 17,
+    name: '橋か日陰か',
+    hint: '岩は1つ。橋にも日陰にも使いたい。',
+    need: ['stone'], alt: 'sandal', dirs: 'D',
+    map: [
+      '#########',
+      '#P....f.#',
+      '#WB.....#',
+      '>.......#',
+      '######O##',
+      '#E.....##',
+      '#########',
+    ],
+  },
+  {
+    id: 'c1x.m', label: '1-m', chapter: 9, theme: 1, v2: true, free: true,
+    par: 12,
+    name: '交差点に石を置く',
+    hint: '縦と横、2本の視線。岩はひとつ。',
+    need: ['push'],
+    map: [
+      '#####v###',
+      '#####.###',
+      '#####.###',
+      '>......E#',
+      '###.B..##',
+      '#P......#',
+      '#########',
+    ],
+  },
+  {
+    id: 'c1x.n', label: '1-n', chapter: 9, theme: 1, v2: true, free: true,
+    par: 11,
+    name: '石の護衛',
+    hint: '岩の陰にいれば視線は届かない。押しすぎに注意。',
+    need: ['push'],
+    map: [
+      '#########',
+      '#P#######',
+      '#.B....O<',
+      '#####.###',
+      '#####E###',
+      '#########',
+    ],
+  },
+  {
+    id: 'c1x.o', label: '1-o', chapter: 9, theme: 1, v2: true, free: true,
+    par: 11,
+    name: '押す側へ跳ぶ',
+    hint: '翼のサンダルは、向こう岸へ渡るためだけのものではない。',
+    itemReq: ['sandal'], need: ['push'],
+    map: [
+      '######v##',
+      '#P.W##.##',
+      '#..O.B.##',
+      '#####..##',
+      '######.##',
+      '######E##',
+      '#########',
+    ],
+  },
+  {
+    id: 'c1x.p', label: '1-p', chapter: 9, theme: 1, v2: true, free: true,
+    par: 13,
+    name: '冥府の総まとめ',
+    hint: '石像、岩、鏡の盾。それぞれ、どこで使う？',
+    itemReq: ['shield'], need: ['sink'], dirs: 'D',
+    map: [
+      '###########',
+      '#P.M......#',
+      '#.B...f...#',
+      '>.........#',
+      '######O####',
+      '>.........#',
+      '######E####',
+    ],
+  },
+);
+
 </script>
 <script>
 // 32x32 sprite strips (drawn by ChatGPT, sliced and aligned for the grid)
@@ -1822,12 +2196,15 @@ const S = 4; // canvas pixels per tile unit
 ctx.imageSmoothingEnabled = false;
 
 function chapterOf(i) { return LEVELS[i].chapter || 1; }
+// which chapter's look (tiles, daylight) a stage uses; trial stages borrow a chapter's look
+function themeOf(i) { return LEVELS[i].theme || chapterOf(i); }
 function stageLabel(i) {
+  if (LEVELS[i].label) return LEVELS[i].label;
   const ch = chapterOf(i); let n = 0;
   for (let k = 0; k <= i; k++) if (chapterOf(k) === ch) n++;
   return LEVELS[i].boss ? ch + '-BOSS' : ch + '-' + n;
 }
-const CHAPTER_NAME = { 1: 'ゴーゴンの島へ', 2: 'アンドロメダと海の怪物', 3: 'セリポス帰還' };
+const CHAPTER_NAME = { 1: 'ゴーゴンの島へ', 2: 'アンドロメダと海の怪物', 3: 'セリポス帰還', 9: '1章候補（試作・新ルール）' };
 // what the clear screen says at the end of each chapter (the hook lines come from the story tab of the design doc)
 const CHAPTER_CLEAR = {
   1: { title: 'メドゥーサを紋章に封じ、島を脱出した', hook: '紋章を手に、母のもとへ急ぐペルセウス。<br>海辺の岩場から、助けを呼ぶ声がした。' },
@@ -1902,6 +2279,9 @@ function handleEvent(e) {
   if (e.t === 'splash') { const b = state.boss; if (b) burst(b.x + 1, b.y + 1, ['#9fe0f0', '#ffffff'], 16); SFX.sink(); }
   if (e.t === 'swept') { burst(e.x, e.y, ['#9fe0f0', '#ffffff', '#3a8fb8'], 18); state.msg = (state.msg ? state.msg + '　' : '') + 'スパルトイが波にのまれた！'; }
   if (e.t === 'stagger') { burst(e.x, e.y, ['#fbe08a', '#ffffff'], 8); state.msg = '頭上を跳び越えた。スパルトイはよろめいて、このターン動けない'; }
+  if (e.t === 'fall') burst(e.x, e.y, ['#3b3550', '#8b887f', '#ffffff'], 14);
+  if (e.t === 'alert') { const m = state.mobs.find(o => o.x === e.x && o.y === e.y); if (m) wakeMarks.push({ id: m.id, t0: performance.now() }); }
+  if (e.t === 'block') burst(state.player.x, state.player.y, ['#7fe3ef', '#ffffff'], 14);
   if (e.t === 'stone') { burst(e.x, e.y, ['#c9c6bd', '#8b887f', '#ffffff'], 12); if (facing.has(e.id)) statueFace.set(e.x + ',' + e.y, facing.get(e.id)); }
   if (e.t === 'sink') burst(e.x, e.y, ['#9fe0f0', '#c9c6bd', '#ffffff'], 16);
   if (e.t === 'petrify') shake();
@@ -1967,6 +2347,7 @@ function renderHud() {
   if (state.keys > 0) chip('key', '鍵 ×' + state.keys);
   if (state.invis > 0) chip('helm', '透明 あと' + state.invis + 'ターン');
   if (state.shieldT > 0) chip('shield', '鏡の盾 あと' + state.shieldT + 'ターン');
+  if (state.guard) chip('shield', '鏡の盾 構え中（次の攻撃を1回防ぐ）');
   if (state.armed) chip('armed', '跳躍の構え：方向を選ぶ');
   if (state.sea >= 0) chip(tideHigh(state) ? 'shield' : 'key', tideHigh(state) ? '潮：満ち潮' : '潮：引き潮');
   if (state.boss && state.boss.kind === 'king') {
@@ -1988,7 +2369,7 @@ function renderHud() {
   beltItems.forEach((it, i) => {
     const b = document.createElement('button');
     const n = state.inv[it];
-    b.className = 'slot' + (n ? '' : ' empty') + ((it === 'sandal' && state.armed) || (it === 'helm' && state.invis > 0) || (it === 'shield' && state.shieldT > 0) ? ' on' : '');
+    b.className = 'slot' + (n ? '' : ' empty') + ((it === 'sandal' && state.armed) || (it === 'helm' && state.invis > 0) || (it === 'shield' && (state.shieldT > 0 || state.guard)) ? ' on' : '');
     b.innerHTML = '<span class="kb">' + (i + 1) + '</span><span class="ct">×' + n + '</span><img alt="" src="' + URL_OF[it] + '"><span class="nm">' + ITEM_NAME[it] + '</span>';
     b.title = ITEM_NAME[it] + '：' + ITEM_DESC[it];
     b.setAttribute('aria-label', ITEM_NAME[it] + ' 残り' + n + '。' + ITEM_DESC[it]);
@@ -2071,8 +2452,8 @@ async function fillRankLists() {
   }
 }
 function onWin() {
-  if (stageIdx + 1 > progress.unlocked) progress.unlocked = Math.min(stageIdx + 1, LEVELS.length - 1);
-  if (stageIdx === LEVELS.length - 1) progress.cleared = true;
+  if (!LEVELS[stageIdx].free && stageIdx + 1 > progress.unlocked) progress.unlocked = Math.min(stageIdx + 1, LEVELS.length - 1);
+  if (stageIdx === LEVELS.length - 1 && !LEVELS[stageIdx].free) progress.cleared = true;
   const rec = { t: state.turn, h: state.hearts, m: encodeMoves(moves) };
   if (hintUsed) rec.a = true;
   const prev = progress.best[LEVELS[stageIdx].id];
@@ -2451,6 +2832,14 @@ function openCard(mode) {
     if (firstEnemy(stageIdx, 'h')) html += '<div class="newitem"><img alt="" src="' + hopliteURL() + '"><div><b>敵：ホプリタイ（重装歩兵）</b>ポリュデクテス王に仕える兵士。大きな丸い盾で体の正面を守っているので、鎌は正面からは通らない。横か後ろから狙おう。紋章の光は盾ごと石に変える。</div></div>';
     if (firstEnemy(stageIdx, 'nx')) html += '<div class="newitem"><img alt="" src="' + nereidURL() + '"><div><b>敵：ネレイス（海の精）</b>アンドロメダの母が「娘はネレイスより美しい」と自慢したため、怒っている海の精。水の中しか動けず、潮が引くと浅瀬に取り残される。</div></div>';
     fresh.forEach(it => { html += '<div class="newitem"><img alt="" src="' + URL_OF[it] + '"><div><b>新しい神器：' + ITEM_NAME[it] + '</b>' + ITEM_DESC[it] + '</div></div>'; });
+    if (lv.v2) {
+      const mc = lv.map.join('');
+      if (/[<>^v]/.test(mc)) html += '<div class="newitem"><img alt="" src="' + statueURL() + '"><div><b>メドゥーサの像</b>矢印の向きへ赤い視線を出し続ける。浴びるとハート−1。敵が浴びると石像になる。壁・柱・岩・石像・ツタで止まり、奈落は越える。</div></div>';
+      if (mc.includes('f')) html += '<div class="newitem"><img alt="" src="' + URL_OF.spartoi + '"><div><b>巡回の番兵</b>決まった向きに1マスずつ進み、ふさがれると折り返す。通り道にいるとぶつかってハート−1。追いかけてはこない。</div></div>';
+      if (mc.includes('r')) html += '<div class="newitem"><img alt="" src="' + sentryURL() + '"><div><b>見張りの番兵</b>その場から動かない。向いている列に入ると気づき（！）、次のターンに一直線に突進する。奈落に入れば落ち、像の視線に入れば石になる。</div></div>';
+      if (mc.includes('M')) html += '<p class="sub">新ルールの鏡の盾：構えると、次に受ける攻撃を種類を問わず1回だけ防いで砕ける。</p>';
+      html += '<p class="sub">新ルール：岩や石像を押すと、押したものだけが1マス動き、ペルセウスはその場に残る。</p>';
+    }
     if (stageIdx === 0) html += '<p class="sub">ペルセウスはゴーゴンの島を目指し、冥府の迷宮へ降りていく。各ステージの出口（光る階段）にたどり着けばクリア。</p>';
     if (lv.story) html += '<p class="sub">' + lv.story + '</p>';
     const b = progress.best[LEVELS[stageIdx].id];
@@ -2498,8 +2887,8 @@ function openCard(mode) {
     html += '<div class="eyebrow">STAGES</div><h2>ステージを選ぶ</h2>';
     let curCh = 0;
     LEVELS.forEach((l, i) => {
-      if (chapterOf(i) !== curCh) { html += (curCh ? '</div>' : '') + '<p class="chap">第' + chapterOf(i) + '章　' + CHAPTER_NAME[chapterOf(i)] + (OPENINGS[chapterOf(i)] && (progress.seenOp || {})[chapterOf(i)] ? '<button class="opbtn" data-op="' + chapterOf(i) + '">▶ オープニング</button>' : '') + ((progress.seenEnd || {})[CHAPTER_END_MOVIE[chapterOf(i)]] ? '<button class="opbtn" data-end="' + CHAPTER_END_MOVIE[chapterOf(i)] + '">▶ 章の終わり</button>' : '') + '</p><div class="grid-stages">'; curCh = chapterOf(i); }
-      const locked = i > progress.unlocked;
+      if (chapterOf(i) !== curCh) { html += (curCh ? '</div>' : '') + '<p class="chap">' + (l.free ? '' : '第' + chapterOf(i) + '章　') + CHAPTER_NAME[chapterOf(i)] + (OPENINGS[chapterOf(i)] && (progress.seenOp || {})[chapterOf(i)] ? '<button class="opbtn" data-op="' + chapterOf(i) + '">▶ オープニング</button>' : '') + ((progress.seenEnd || {})[CHAPTER_END_MOVIE[chapterOf(i)]] ? '<button class="opbtn" data-end="' + CHAPTER_END_MOVIE[chapterOf(i)] + '">▶ 章の終わり</button>' : '') + '</p><div class="grid-stages">'; curCh = chapterOf(i); }
+      const locked = i > progress.unlocked && !l.free;
       const b = progress.best[LEVELS[i].id];
       html += '<button data-s="' + i + '" class="' + (i === stageIdx ? 'cur ' : '') + (l.boss ? 'boss' : '') + '"' + (locked ? ' disabled' : '') + '><small>' + stageLabel(i) + '</small>' + (locked ? '？？？' : l.name) + (b ? '<span class="best">' + starStr(starsAt(i)) + ' ' + fmtRec(b) + '</span>' : '') + '</button>';
     });
@@ -3010,12 +3399,12 @@ function drawVine(tx, ty, t) {
 let SEA = null, TER = null, COAST = null;
 const COAST_NAMES = ['sand0', 'sand1', 'sand2', 'sand3', 'wetsurf0', 'wetsurf1', 'star', 'drift', 'rock0', 'rock1', 'rock2', 'cliff0', 'cliff1', 'searock', 'seaweed', 'rockgrass', 'gate', 'gateopen', 'stairs', 'post', 'palm', 'boat', 'jar', 'flag', 'wet0', 'wet1'];
 // 第2章は浜辺のタイル（ChatGPTの絵）で描く
-function coastOn() { return !!COAST && chapterOf(stageIdx) === 2; }
+function coastOn() { return !!COAST && themeOf(stageIdx) === 2; }
 function coastImg(name, tx, ty) { ctx.drawImage(COAST[name], tx * T, ty * T, T, T); }
 // 第3章はセリポスの町と王宮（ChatGPTの絵）。3-8からは王宮の床
 let PALACE = null;
 const PALACE_NAMES = ['cob0', 'cob1', 'cob2', 'cob3', 'cob4', 'cob5', 'grass0', 'grass1', 'pal0', 'pal1', 'pal2', 'pal3', 'crack', 'gravel', 'mtop', 'wall_a', 'wall_b', 'wallp_a', 'wallp_b', 'colon_a', 'colon_b', 'colon2_a', 'colon2_b', 'column_a', 'column_b', 'ruin_a', 'ruin_b', 'cypress_a', 'cypress_b', 'banner_a', 'banner_b', 'door_a', 'door_b', 'dooropen_a', 'dooropen_b', 'stairs_a', 'stairs_b', 'pit_a', 'pit_b', 'gate_a', 'gate_b', 'pedestal_a', 'pedestal_b', 'well_a', 'well_b', 'fountain_a', 'fountain_b', 'scob0', 'scob1', 'scob2', 'scob3', 'spal0', 'spal1', 'spal2', 'spal3'];
-function palaceOn() { return !!PALACE && chapterOf(stageIdx) === 3; }
+function palaceOn() { return !!PALACE && themeOf(stageIdx) === 3; }
 function dayOn() { return coastOn() || palaceOn(); }
 function inPalace() { const first = LEVELS.findIndex((L, k) => chapterOf(k) === 3); return stageIdx - first >= 7; }
 function palImg(name, tx, ty) { ctx.drawImage(PALACE[name], tx * T, ty * T, T, T); }
@@ -3106,6 +3495,17 @@ function tileMark(x, y, col) { // a soft square under a character shows exactly 
   ctx.globalAlpha = 0.12; px(x + 2, y + 2, T - 4, T - 4, col); ctx.globalAlpha = 1;
 }
 let bossFlash = -1e9;
+function drawMedusaStatue(X, Y, d, t) {
+  shadow(X, Y, 13);
+  px(X + 1, Y + 12, 14, 4, '#5d5a54'); px(X + 1, Y + 12, 14, 1, '#a9a69c');
+  const im = IMG.medusaOpen || IMG.medusa;
+  if (im) { ctx.filter = 'grayscale(1) brightness(0.95) contrast(1.15)'; drawChar(im, X, Y - 2); ctx.filter = 'none'; }
+  const g = 0.6 + 0.4 * Math.sin(t / 160);
+  ctx.globalAlpha = g;
+  const [ex, ey] = { U: [7, 1], D: [7, 9], L: [2, 5], R: [12, 5] }[d];
+  px(X + ex - 1, Y + ey, 2, 2, '#ff4a3a'); px(X + ex + 1, Y + ey, 2, 2, '#ff4a3a');
+  ctx.globalAlpha = 1;
+}
 function drawRock(X, Y) { // a round boulder, pushable
   shadow(X, Y, 13);
   if (IMG.boulder) { drawChar(IMG.boulder, X, Y); return; }
@@ -3172,6 +3572,13 @@ function hopliteURL() {
   try { drawHoplite(0, 0, { awake: true, f: 'D' }, 0, false, 0); } finally { ctx = keep; }
   return (hopliteUrl = c.toDataURL());
 }
+function statueURL() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const keep = ctx; ctx = c.getContext('2d'); ctx.imageSmoothingEnabled = false; ctx.setTransform(4, 0, 0, 4, 0, 0);
+  try { drawMedusaStatue(0, 2, 'D', 0); } finally { ctx = keep; }
+  return c.toDataURL();
+}
+function sentryURL() { return IMG.soldier ? IMG.soldier.D[0].toDataURL() : URL_OF.spartoi; }
 let nereidUrl = null;
 function nereidURL() {
   if (nereidUrl) return nereidUrl;
@@ -3213,12 +3620,16 @@ function renderLights(s, t, playerXY, sc, ox, oy) {
   if (lightCv.width !== W || lightCv.height !== H) { lightCv.width = W; lightCv.height = H; }
   const L = [];
   const [hx, hy] = playerXY;
-  L.push({ x: hx * T + 8, y: hy * T + 4, r: 70, a: 1, col: s.shieldT > 0 ? '#7fe3ef' : '#c6d8ff', g: s.shieldT > 0 ? 0.16 : 0.05 });
+  L.push({ x: hx * T + 8, y: hy * T + 4, r: 70, a: 1, col: s.shieldT > 0 || s.guard ? '#7fe3ef' : '#c6d8ff', g: s.shieldT > 0 || s.guard ? 0.16 : 0.05 });
   for (const tq of torches) { const fl = Math.sin(t / 110 + tq.x * 2) * 3 + Math.sin(t / 47 + tq.y) * 1.5; L.push({ x: tq.x * T + 8, y: tq.y * T + 6, r: 46 + fl, a: 0.9, col: '#ffad4a', g: 0.2 }); }
   for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) {
     const c = tile(s, x, y);
     if (c === 'E') L.push(exitOpen(s) ? { x: x * T + 8, y: y * T + 8, r: 40, a: 0.95, col: '#ffd36b', g: 0.24 } : { x: x * T + 8, y: y * T + 8, r: 22, a: 0.6, col: '#ff4a3a', g: 0.18 });
     else if ('KHSWMNY'.includes(c)) L.push({ x: x * T + 8, y: y * T + 8, r: 16, a: 0.55, col: '#ffe08a', g: 0.14 });
+  }
+  if (s.v2) {
+    for (let i = 0; i < s.grid.length; i++) if (GAZE_DIR[s.grid[i]]) L.push({ x: (i % s.w) * T + 8, y: ((i / s.w) | 0) * T + 4, r: 26, a: 0.8, col: '#ff6a5a', g: 0.16 });
+    for (const [gx, gy] of statueGaze(s)) L.push({ x: gx * T + 8, y: gy * T + 8, r: 13, a: 0.5, col: '#ff4a3a', g: 0.12 });
   }
   if (s.medusa && s.medusa.alive) {
     L.push({ x: s.medusa.x * T + 8, y: s.medusa.y * T + 2, r: 36, a: 0.85, col: '#7cff9a', g: 0.2 });
@@ -3330,6 +3741,19 @@ function drawForecast(s, t) {
       ctx.fillStyle = '#12172e'; ctx.beginPath(); ctx.arc(q.x * T + 3.5, q.y * T + 3.5, 3.2, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#ffd36b'; ctx.font = 'bold 5px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(String(q.n), q.x * T + 3.5, q.y * T + 3.8);
+    }
+  }
+  // 見張りの列：ふだんは薄い橙、気づいた（次に突進する）ときは赤
+  if (s.v2) for (const m of s.mobs) {
+    if (m.kind !== 'sentry') continue;
+    const [dx, dy] = { U: [0, -1], D: [0, 1], L: [-1, 0], R: [1, 0] }[m.d];
+    let x = m.x + dx, y = m.y + dy;
+    while (true) {
+      const c = tile(s, x, y);
+      if (c === '#' || c === 'I' || c === 'T' || c === 'V' || c === 'D' || GAZE_DIR[c] || x < 0 || y < 0 || x >= s.w || y >= s.h) break;
+      if (s.mobs.some(o => o.x === x && o.y === y)) break;
+      ctx.globalAlpha = m.alert ? 0.3 * pulse + 0.15 : 0.14; px(x * T + (dx ? 0 : 6), y * T + (dy ? 0 : 6), dx ? T : 4, dy ? T : 4, m.alert ? '#ff4a3a' : '#ffad4a'); ctx.globalAlpha = 1;
+      x += dx; y += dy;
     }
   }
   // ケートス：水しぶきの予告（赤い帯）と、大波で危ないマス（波模様）
@@ -3477,7 +3901,7 @@ const V64_SET = {
   3: { faces: [6, 7, 8], torch: null, low: 9, high: 10, sea: 11, mirror: true }, // its shallows don't tile by themselves
 };
 function buildTileLayer64(s) {
-  const ch = Math.min(3, chapterOf(stageIdx)), tiles = V64.tiles[ch], set = V64_SET[ch];
+  const ch = Math.min(3, themeOf(stageIdx)), tiles = V64.tiles[ch], set = V64_SET[ch];
   const water = V64.tiles[set.sea != null ? ch : 2], wset = set.sea != null ? set : V64_SET[2];
   tileLayer.width = s.w * 64; tileLayer.height = s.h * 64;
   const g = tileLayer.getContext('2d');
@@ -3574,9 +3998,9 @@ function render(t) {
     else if (c === 'w') drawShallow(x, y, s, t);
   }
   if (!TILE) for (const tq of torches) drawTorch(tq, t);
-  if (s.medusa && s.medusa.alive) {
+  if ((s.medusa && s.medusa.alive) || s.v2) {
     const a = 0.24 + 0.12 * Math.sin(t / 180);
-    for (const [gx, gy] of gazeTiles(s)) {
+    for (const [gx, gy] of (s.v2 ? statueGaze(s) : gazeTiles(s))) {
       ctx.globalAlpha = a; px(gx * T, gy * T, T, T, '#e0473f'); ctx.globalAlpha = 1;
       px(gx * T + 6, gy * T + 7, 4, 2, '#ff9a8a'); px(gx * T + 7, gy * T + 6, 2, 4, '#ff9a8a'); px(gx * T + 7, gy * T + 7, 2, 2, '#7a1d1d');
     }
@@ -3610,6 +4034,11 @@ function render(t) {
       if (s.medusa.alive) { shadow(X, Y, 12); drawChar(IMG.medusaOpen || IMG.medusa, X, Y + (Math.sin(t / 300) > 0 ? 0 : -0.5)); }
       else { ctx.filter = 'grayscale(1)'; drawChar(IMG.medusa, X, Y + 2, 0.45); ctx.filter = 'none'; }
     } });
+  }
+  if (s.v2) for (let i = 0; i < s.grid.length; i++) {
+    const d = GAZE_DIR[s.grid[i]]; if (!d) continue;
+    const gx = i % s.w, gy = (i / s.w) | 0;
+    drawables.push({ y: gy, fn: () => drawMedusaStatue(gx * T, gy * T, d, t) });
   }
   if (s.boss && s.boss.kind === 'king') {
     const b = s.boss, im = OPIMG.kingSit ? (b.alive && performance.now() - bossFlash < 1500 ? OPIMG.kingAngry : OPIMG.kingSit) : OPIMG.P_king0;
@@ -3652,7 +4081,7 @@ function render(t) {
       if (st.kind === 'rock') { drawRock(X, Y); return; }
       shadow(X, Y, 12);
       px(X + 2, Y + 13, 12, 3, '#6d6a63'); px(X + 2, Y + 13, 12, 1, '#a9a69c'); // pedestal
-      const set = st.kind === 'sister' ? IMG.sister : st.kind === 'hoplite' && IMG.hoplite ? IMG.hoplite : st.kind === 'soldier' && IMG.soldier ? IMG.soldier : st.kind === 'nereid' && IMG.nereid ? IMG.nereid : IMG.spartoi;
+      const set = st.kind === 'sister' ? IMG.sister : st.kind === 'hoplite' && IMG.hoplite ? IMG.hoplite : (st.kind === 'soldier' || st.kind === 'sentry') && IMG.soldier ? IMG.soldier : st.kind === 'nereid' && IMG.nereid ? IMG.nereid : IMG.spartoi;
       ctx.filter = 'grayscale(1) brightness(1.05) contrast(1.1)';
       drawChar((set[statueFace.get(st.x + ',' + st.y) || st.dir] || set.D)[0], X, Y - 1);
       ctx.filter = 'none';
@@ -3665,6 +4094,7 @@ function render(t) {
       const fm = from.mobs.find(o => o.id === m.id);
       if (fm) { mx = lerp(fm.x, m.x, k); my = lerp(fm.y, m.y, k); if (fm.x !== m.x || fm.y !== m.y) { moving = k < 1; facing.set(m.id, dirOf(m.x - fm.x, m.y - fm.y)); } }
     }
+    if (m.d && !moving) facing.set(m.id, m.d);
     if (m.awake && !facing.has(m.id)) facing.set(m.id, dirOf(s.player.x - m.x, s.player.y - m.y));
     const d = facing.get(m.id) || 'D';
     drawables.push({ y: my, fn: () => {
@@ -3682,7 +4112,7 @@ function render(t) {
         if (!m.awake && !IMG.hoplite) { const ph = Math.floor(t / 420 + m.id) % 3, zx = X + 12 + ph, zy = Y - 1 - ph * 2; px(zx, zy, 3, 1, PAL.Y); px(zx + 1, zy + 1, 1, 1, PAL.Y); px(zx, zy + 2, 3, 1, PAL.Y); }
         else if (m.stun > 0) { const ph = Math.floor(t / 140) % 2; px(X + 3 + ph * 8, Y - 1, 2, 2, PAL.h); }
         return; }
-      const set = m.kind === 'sister' ? IMG.sister : m.kind === 'soldier' ? (IMG.soldier || IMG.spartoi) : IMG.spartoi;
+      const set = m.kind === 'sister' ? IMG.sister : m.kind === 'soldier' || m.kind === 'sentry' ? (IMG.soldier || IMG.spartoi) : IMG.spartoi;
       const sleepImg = { shade: IMG.spartoiBroken && IMG.spartoiSleep, sister: IMG.sisterSleep, soldier: IMG.soldierSleep }[m.kind];
       if (V64 && (!m.awake && sleepImg || m.stun > 0 && m.kind === 'soldier' && IMG.soldierStun)) {
         drawChar(!m.awake ? sleepImg : IMG.soldierStun, X, Y, frozen ? 0.55 : 1);
@@ -3690,6 +4120,7 @@ function render(t) {
         return;
       }
       const img = !m.awake && m.kind === 'shade' && IMG.spartoiBroken ? IMG.spartoiSleep : (m.awake ? set[d] : set.D)[frame] || set.D[0];
+      if (m.kind === 'sentry') { drawChar(img, X, Y, frozen ? 0.55 : 1); if (m.alert && !frozen) { const ph = Math.floor(t / 160) % 2; px(X + 7, Y - 6 - ph, 2, 5, '#ff4a3a'); px(X + 7, Y - ph, 2, 2, '#ff4a3a'); } if (m.stun > 0) { const ph = Math.floor(t / 140) % 2; px(X + 3 + ph * 8, Y - 1, 2, 2, PAL.h); } return; }
       if (m.kind === 'soldier' && V64) { drawChar(img, X, Y - (moving ? Math.round(Math.sin(k * Math.PI) * 2) / 2 : 0), frozen ? 0.55 : 1); return; }
       if (m.kind === 'soldier') { ctx.filter = 'sepia(1) saturate(2.2) hue-rotate(-15deg) brightness(1.05)'; drawChar(img, X, Y - (moving ? Math.round(Math.sin(k * Math.PI) * 2) / 2 : 0), frozen ? 0.55 : 1); ctx.filter = 'none'; if (m.stun > 0) { const ph = Math.floor(t / 140) % 2; px(X + 3 + ph * 8, Y - 1, 2, 2, PAL.h); } return; }
             const tint = '';
@@ -3723,7 +4154,7 @@ function render(t) {
     const alpha = s.invis > 0 ? 0.35 + 0.1 * Math.sin(t / 120) : 1;
     const yy = Y - lift;
     if (s.status === 'lose' && s.cause === 'petrify') { ctx.filter = 'grayscale(1) brightness(1.15)'; drawChar(img, X, Y); ctx.filter = 'none'; return; }
-    const hasShield = s.inv.shield > 0, raised = s.shieldT > 0, hasHarpe = s.inv.harpe > 0;
+    const hasShield = s.inv.shield > 0, raised = s.shieldT > 0 || s.guard, hasHarpe = s.inv.harpe > 0;
     const gear = (im, gx, gy, sz, a) => { ctx.globalAlpha = a; ctx.drawImage(im, Math.round(gx * 2) / 2, Math.round(gy * 2) / 2, sz, sz); ctx.globalAlpha = 1; };
     // gear carried behind the body
     if (hasShield && !raised && dir !== 'U') gear(IMG.shield, X + (dir === 'D' ? 10 : dir === 'R' ? -1 : 9), yy + 6, 7, alpha);

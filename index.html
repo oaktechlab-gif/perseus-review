@@ -1684,7 +1684,7 @@ LEVELS.push(
   {
     id: 'c1x.a', label: '1-a', chapter: 9, theme: 1, v2: true, free: true,
     par: 12,
-    name: '柱の影を歩く',
+    name: '【0章向け】柱の影を歩く',
     hint: '像の赤い視線を浴びるとハート−1。視線は柱で止まる。',
     need: [], alt: 'shield',
     map: [
@@ -1700,7 +1700,7 @@ LEVELS.push(
   {
     id: 'c1x.b', label: '1-b', chapter: 9, theme: 1, v2: true, free: true,
     par: 6,
-    name: '岩で日陰を作る',
+    name: '【0章向け】岩で日陰を作る',
     hint: '岩も視線をさえぎる。押しても自分はその場に残る。',
     need: ['push'], alt: 'shield',
     map: [
@@ -1743,7 +1743,7 @@ LEVELS.push(
   {
     id: 'c1x.e', label: '1-e', chapter: 9, theme: 1, v2: true, free: true,
     par: 13,
-    name: '切らないツタ',
+    name: '【0章向け】切らないツタ',
     hint: 'ハルペーの鎌はツタを1つだけ断てる。ツタも視線をさえぎっている。',
     need: ['cut'], itemReq: ['harpe'],
     map: [
@@ -1803,7 +1803,7 @@ LEVELS.push(
   {
     id: 'c1x.i', label: '1-i', chapter: 9, theme: 1, v2: true, free: true,
     par: 17,
-    name: '構えるのはまだ早い',
+    name: '【0章向け】構えるのはまだ早い',
     hint: '鏡の盾は、構えたあと最初に受ける攻撃を1回だけ防いで砕ける。',
     itemReq: ['shield'],
     map: [
@@ -1818,10 +1818,10 @@ LEVELS.push(
   },
   {
     id: 'c1x.j', label: '1-j', chapter: 9, theme: 1, v2: true, free: true,
-    par: 20,
+    par: 13,
     name: '兜は視線を止めない',
     hint: 'ハデスの兜をかぶると、しばらく敵が動かない。ただし像の視線は止まらない。',
-    alt: 'helm', dirs: 'L',
+    itemReq: ['helm'], trick: ['helm', 'stone'], dirs: 'L',
     map: [
       '####v#####',
       '#P.B.#####',
@@ -1834,7 +1834,7 @@ LEVELS.push(
   {
     id: 'c1x.k', label: '1-k', chapter: 9, theme: 1, v2: true, free: true,
     par: 15,
-    name: '鍵は視線の中',
+    name: '【0章向け】鍵は視線の中',
     hint: '鍵を拾うには、そのマスに立たなければならない。',
     need: ['push'],
     map: [
@@ -1849,14 +1849,14 @@ LEVELS.push(
   },
   {
     id: 'c1x.l', label: '1-l', chapter: 9, theme: 1, v2: true, free: true,
-    par: 17,
+    par: 16,
     name: '橋か日陰か',
     hint: '岩は1つ。橋にも日陰にも使いたい。',
-    need: ['stone'], alt: 'sandal', dirs: 'D',
+    need: [], itemReq: ['sandal'], trick: ['stone', 'push', 'jump'], dirs: 'D',
     map: [
       '#########',
-      '#P....f.#',
-      '#WB.....#',
+      '#P......#',
+      '#WB...f.#',
       '>.......#',
       '######O##',
       '#E.....##',
@@ -1882,7 +1882,7 @@ LEVELS.push(
   {
     id: 'c1x.n', label: '1-n', chapter: 9, theme: 1, v2: true, free: true,
     par: 11,
-    name: '石の護衛',
+    name: '【0章向け】石の護衛',
     hint: '岩の陰にいれば視線は届かない。押しすぎに注意。',
     need: ['push'],
     map: [
@@ -1897,7 +1897,7 @@ LEVELS.push(
   {
     id: 'c1x.o', label: '1-o', chapter: 9, theme: 1, v2: true, free: true,
     par: 11,
-    name: '押す側へ跳ぶ',
+    name: '【0章向け】押す側へ跳ぶ',
     hint: '翼のサンダルは、向こう岸へ渡るためだけのものではない。',
     itemReq: ['sandal'], need: ['push'],
     map: [
@@ -1912,18 +1912,16 @@ LEVELS.push(
   },
   {
     id: 'c1x.p', label: '1-p', chapter: 9, theme: 1, v2: true, free: true,
-    par: 13,
+    par: 18,
     name: '冥府の総まとめ',
-    hint: '石像、岩、鏡の盾。それぞれ、どこで使う？',
-    itemReq: ['shield'], need: ['sink'], dirs: 'D',
+    hint: '見張り、番兵、岩、鎌。2本の視線を、それぞれ何でふさぐ？',
+    itemReq: ['harpe'], need: [], trick: ['stone', 'sink', 'push', 'cut'], dirs: 'RL',
     map: [
-      '###########',
-      '#P.M......#',
-      '#.B...f...#',
-      '>.........#',
-      '######O####',
-      '>.........#',
-      '######E####',
+      '######v####v##',
+      '#r.O.........#',
+      '#..B...Bf.V..#',
+      '#P..S.......E#',
+      '##############',
     ],
   },
 );

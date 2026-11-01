@@ -834,18 +834,20 @@ function sentryStep(s, m) {
   }
   m.alert = false;
   const [dx, dy] = DIRS[m.d];
+  const sx = m.x, sy = m.y, dash = (x, y) => s.events.push({ t: 'charge', x0: sx, y0: sy, x1: x, y1: y, d: m.d });
   while (true) {
     const nx = m.x + dx, ny = m.y + dy, c = tile(s, nx, ny);
-    if (nx === s.player.x && ny === s.player.y) { hurt(s, '見張りの突進を受けた！', m.x, m.y); return; }
+    if (nx === s.player.x && ny === s.player.y) { dash(m.x, m.y); hurt(s, '見張りの突進を受けた！', sx, sy); return; }
     if (c === 'O' || c === '~' || (c === 'w' && tideHigh(s))) {
       s.mobs.splice(s.mobs.indexOf(m), 1);
+      dash(nx, ny);
       s.events.push({ t: 'fall', x: nx, y: ny, from: [m.x, m.y] });
       s.msg = c === 'O' ? '見張りは勢いあまって奈落へ落ちた' : '見張りは勢いあまって海へ落ちた';
       return;
     }
-    if (!guardOK(s, nx, ny)) return;
+    if (!guardOK(s, nx, ny)) { dash(m.x, m.y); return; }
     m.x = nx; m.y = ny;
-    if (inStatueGaze(s, m.x, m.y)) { petrify(s, m); return; }
+    if (inStatueGaze(s, m.x, m.y)) { dash(m.x, m.y); petrify(s, m); return; }
   }
 }
 function v2Phase(s) {
@@ -1726,18 +1728,16 @@ LEVELS.push(
   },
   {
     id: 'c1x.d', label: '1-d', chapter: 9, theme: 1, v2: true, free: true,
-    par: 11,
+    par: 14,
     name: '突進を視線で止める',
     hint: '見張りは、向いている列に入ると気づき（！）、次のターンに一直線に突進してくる。',
-    need: [], trick: ['stone'], dirs: 'R',
+    need: [], trick: ['stone', 'push'], dirs: 'R',
     map: [
-      '######v######',
-      '#r..........#',
-      '##.###.######',
-      '#P......E...#',
-      '#.#########.#',
-      '#...........#',
-      '#############',
+      '###v###v###',
+      '#r........#',
+      '#....B....#',
+      '#P.......E#',
+      '###########',
     ],
   },
   {
@@ -1756,18 +1756,16 @@ LEVELS.push(
   },
   {
     id: 'c1x.f', label: '1-f', chapter: 9, theme: 1, v2: true, free: true,
-    par: 13,
+    par: 11,
     name: '切ると石になる',
     hint: '鎌は一度きり。番兵を斬るか、ツタを断つか。',
     need: [], trick: ['stone'], itemReq: ['harpe'], dirs: 'R',
     map: [
-      '######v######',
-      '#P.S.#.######',
-      '#.f..V.######',
-      '#........E..#',
-      '#.#########.#',
-      '#...........#',
-      '#############',
+      '######v###',
+      '#..f.V...#',
+      '#...S....#',
+      '#P......E#',
+      '##########',
     ],
   },
   {
@@ -2255,7 +2253,8 @@ function doAction(a) {
   moves.push(a); // 操作ログ（再生検証用）
   if (next.turn !== prev.turn) {
     history.push({ s: prev, n });
-    anim = { from: prev, to: next, t0: performance.now(), jump: next.events.some(e => e.t === 'jump') };
+    const ch = next.events.find(e => e.t === 'charge');
+    anim = { from: prev, to: next, t0: performance.now(), jump: next.events.some(e => e.t === 'jump'), charge: ch, dur: ch ? 160 + 70 * (Math.abs(ch.x1 - ch.x0) + Math.abs(ch.y1 - ch.y0)) : 0 };
   }
   state = next;
   for (const e of next.events) handleEvent(e);
@@ -2283,8 +2282,10 @@ function handleEvent(e) {
   if (e.t === 'swept') { burst(e.x, e.y, ['#9fe0f0', '#ffffff', '#3a8fb8'], 18); state.msg = (state.msg ? state.msg + '　' : '') + 'スパルトイが波にのまれた！'; }
   if (e.t === 'stagger') { burst(e.x, e.y, ['#fbe08a', '#ffffff'], 8); state.msg = '頭上を跳び越えた。スパルトイはよろめいて、このターン動けない'; }
   if (e.t === 'fall') burst(e.x, e.y, ['#3b3550', '#8b887f', '#ffffff'], 14);
+  if (e.t === 'charge') { shake(); if (SFX.wake) SFX.wake(); for (let i = 0; i <= Math.abs(e.x1 - e.x0) + Math.abs(e.y1 - e.y0); i++) burst(e.x0 + Math.sign(e.x1 - e.x0) * i, e.y0 + Math.sign(e.y1 - e.y0) * i, ['#e8d9a8', '#b9a77a'], 3); }
   if (e.t === 'alert') { const m = state.mobs.find(o => o.x === e.x && o.y === e.y); if (m) wakeMarks.push({ id: m.id, t0: performance.now() }); }
   if (e.t === 'block') burst(state.player.x, state.player.y, ['#7fe3ef', '#ffffff'], 14);
+  if (e.t === 'stone' && anim && anim.charge && anim.charge.x1 === e.x && anim.charge.y1 === e.y) { setTimeout(() => { burst(e.x, e.y, ['#c9c6bd', '#8b887f', '#ffffff'], 16); shake(); }, anim.dur); return; }
   if (e.t === 'stone') { burst(e.x, e.y, ['#c9c6bd', '#8b887f', '#ffffff'], 12); if (facing.has(e.id)) statueFace.set(e.x + ',' + e.y, facing.get(e.id)); }
   if (e.t === 'sink') burst(e.x, e.y, ['#9fe0f0', '#c9c6bd', '#ffffff'], 16);
   if (e.t === 'petrify') shake();
@@ -3969,7 +3970,7 @@ function render(t) {
   // tween
   let k = 1, lift = 0;
   if (anim) {
-    k = Math.min(1, (t - anim.t0) / (anim.jump ? 240 : 140));
+    k = Math.min(1, (t - anim.t0) / (anim.dur || (anim.jump ? 240 : 140)));
     if (anim.jump) lift = Math.sin(k * Math.PI) * 10;
     if (k >= 1) anim = null;
   }
@@ -4029,6 +4030,25 @@ function render(t) {
       px(tx * T + 7, ty * T + 7, 2, 2, on ? PAL.h : PAL.g);
     }
   }
+  // 見張りの突進：走った跡に土ぼこりの筋と残像
+  if (anim && anim.charge) {
+    const c = anim.charge, len = Math.abs(c.x1 - c.x0) + Math.abs(c.y1 - c.y0);
+    const hx = lerp(c.x0, c.x1, k), hy = lerp(c.y0, c.y1, k), horiz = c.y0 === c.y1;
+    for (let i = 0; i < 3; i++) {
+      ctx.globalAlpha = 0.5 - i * 0.14;
+      const back = (i + 1) * 0.35, gx = horiz ? hx - Math.sign(c.x1 - c.x0) * back : hx, gy = horiz ? hy : hy - Math.sign(c.y1 - c.y0) * back;
+      if (Math.hypot(gx - c.x0, gy - c.y0) <= len && IMG.soldier) { ctx.filter = 'brightness(1.6) saturate(0.4)'; drawChar((IMG.soldier[c.d] || IMG.soldier.D)[1] || IMG.soldier.D[0], gx * T, gy * T); ctx.filter = 'none'; }
+    }
+    ctx.globalAlpha = 0.55;
+    for (let i = 0; i < 4; i++) {
+      const o = 3 + i * 3;
+      if (horiz) px(Math.min(c.x0, hx) * T + 8, hy * T + o, Math.abs(hx - c.x0) * T, 1, '#e8d9a8');
+      else px(hx * T + o, Math.min(c.y0, hy) * T + 8, 1, Math.abs(hy - c.y0) * T, '#e8d9a8');
+    }
+    ctx.globalAlpha = 1;
+    // turned to stone or fell at the end of the dash: it is gone from the state, so draw the runner here until the dash ends
+    if (k < 1 && !anim.to.mobs.some(o => o.kind === 'sentry' && o.x === c.x1 && o.y === c.y1) && IMG.soldier) drawChar((IMG.soldier[c.d] || IMG.soldier.D)[1] || IMG.soldier.D[0], hx * T, hy * T);
+  }
   const OFF = 0; // characters fit exactly inside their tile
   const drawables = [];
   if (s.medusa) {
@@ -4079,6 +4099,7 @@ function render(t) {
   remains = remains.filter(r => performance.now() - r.t0 < 900);
   for (const r of remains) drawables.push({ y: r.y - 0.01, fn: () => { const a = 1 - (performance.now() - r.t0) / 900; drawChar(r.img, r.x * T, r.y * T, Math.max(0, a)); } });
   for (const st of s.statues || []) {
+    if (anim && anim.charge && k < 1 && st.x === anim.charge.x1 && st.y === anim.charge.y1) continue; // still dashing: becomes stone when it arrives
     drawables.push({ y: st.y, fn: () => {
       const X = st.x * T, Y = st.y * T;
       if (st.kind === 'rock') { drawRock(X, Y); return; }
